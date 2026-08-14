@@ -17,7 +17,6 @@ let package = Package(
             targets: [
                 "JWWCore",
                 "JWWCoreData",
-                "JWWTestExtensions",
                 "JWWNetworking",
                 "JWWAppKit",
                 "JWWUIKit"
