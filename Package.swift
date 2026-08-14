@@ -32,6 +32,14 @@ let package = Package(
             targets: ["JWWCoreData"]
         ),
         .library(
+            name: "JWWData",
+            targets: ["JWWCoreData", "JWWSwiftData"]
+        ),
+        .library(
+            name: "JWW SwiftData",
+            targets: ["JWWSwiftData"]
+        ),
+        .library(
             name: "JWWTestExtensions",
             targets: ["JWWTestExtensions"]
         ),
@@ -58,7 +66,7 @@ let package = Package(
         ),
         .target(
             name: "JWWCoreData",
-            dependencies: ["JWWCore"],
+            dependencies: ["_JWWDataInternal", "JWWCore"],
         ),
         .testTarget(
             name: "JWWCoreDataTests",
@@ -66,6 +74,18 @@ let package = Package(
             resources: [
                 .process("Resources")
             ],
+        ),
+        .target(
+            name: "JWWSwiftData",
+            dependencies: ["_JWWDataInternal", "JWWCore"],
+        ),
+        .testTarget(
+            name: "JWWSwiftDataTests",
+            dependencies: ["JWWSwiftData", "JWWCore"],
+        ),
+        .target(
+            name: "_JWWDataInternal",
+            dependencies: ["JWWCore"],
         ),
         .target(
             name: "JWWTestExtensions",
