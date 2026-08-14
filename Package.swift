@@ -46,6 +46,10 @@ let package = Package(
         .library(
             name: "JWWUIKit",
             targets: ["JWWUIKit"]
+        ),
+        .library(
+            name: "JWWSwiftUI",
+            targets: ["JWWSwiftUI"]
         )
     ],
     targets: [
@@ -95,6 +99,9 @@ let package = Package(
         .testTarget(
             name: "JWWUIKitTests",
             dependencies: ["JWWUIKit"],
+        ),
+        .target(
+            name: "JWWSwiftUI",
         )
     ]
 )
