@@ -1,0 +1,23 @@
+{
+  "triggerTaskOnSave.tasks": {
+    "swift: build": [
+      "Sources/**/*.swift"
+    ]
+  },
+  "triggerTaskOnSave.on": true,
+  "triggerTaskOnSave.showNotifications": false,
+  "triggerTaskOnSave.restart": true,
+  "triggerTaskOnSave.delay": 1000,
+  "triggerTaskOnSave.resultIndicatorResetTimeout": 5,
+  "workbench.colorCustomizations": {},
+  "[swift]": {
+    "editor.defaultFormatter": "swiftlang.swift-vscode",
+    "editor.formatOnSave": true
+  },
+  "swift.swiftEnvironmentVariables": {},
+  "lldb.launch.expressions": "native",
+  "files.exclude": {
+    "**/.build": true,
+    "**/.swiftpm": true
+  }
+}

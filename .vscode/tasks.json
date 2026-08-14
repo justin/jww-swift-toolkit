@@ -1,0 +1,210 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "swift: build",
+      "type": "swift",
+      "args": ["build"],
+      "cwd": "${workspaceFolder}",
+      "detail": "Build the JWWCore library",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "presentation": {
+        "reveal": "silent",
+        "panel": "dedicated",
+        "showReuseMessage": false,
+        "clear": true
+      }
+    },
+    {
+      "label": "swift: build tests",
+      "type": "swift",
+      "args": ["build", "--build-tests"],
+      "cwd": "${workspaceFolder}",
+      "detail": "Build the JWWCore test bundle for debugging",
+      "presentation": {
+        "reveal": "silent",
+        "panel": "dedicated",
+        "showReuseMessage": false,
+        "clear": true
+      }
+    },
+    {
+      "label": "swift: test",
+      "type": "swift",
+      "args": ["test"],
+      "cwd": "${workspaceFolder}",
+      "detail": "Run JWWCore tests",
+      "group": "test",
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "showReuseMessage": true,
+        "clear": false
+      }
+    },
+    {
+      "label": "xcode: test all platforms",
+      "type": "shell",
+      "command": "xcodebuild",
+      "args": [
+        "test",
+        "-scheme",
+        "JWW Swift Toolkit-Package",
+        "-destination",
+        "platform=macOS",
+        "-destination",
+        "platform=iOS Simulator,OS=latest,name=iPhone 17 Pro",
+        "-destination",
+        "platform=tvOS Simulator,OS=latest,name=Apple TV",
+        "-destination",
+        "platform=visionOS Simulator,OS=latest,name=Apple Vision Pro",
+        "-destination",
+        "platform=watchOS Simulator,OS=latest,name=Apple Watch Series 11 (42mm)",
+        "-parallel-testing-enabled",
+        "YES",
+        "-maximum-concurrent-test-simulator-destinations",
+        "4"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": "test",
+      "problemMatcher": "$swiftc",
+      "detail": "Test the package on macOS, iOS, tvOS, visionOS, and watchOS",
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "showReuseMessage": true,
+        "clear": false
+      }
+    },
+    {
+      "label": "xcode: build all platforms",
+      "dependsOn": [
+        "xcode: build macOS",
+        "xcode: build iOS",
+        "xcode: build tvOS",
+        "xcode: build visionOS",
+        "xcode: build watchOS"
+      ],
+      "dependsOrder": "sequence",
+      "group": "build",
+      "detail": "Build the package for macOS, iOS, tvOS, visionOS, and watchOS"
+    },
+    {
+      "label": "xcode: build macOS",
+      "type": "shell",
+      "command": "xcodebuild",
+      "args": ["build", "-scheme", "JWW Swift Toolkit-Package", "-destination", "platform=macOS"],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": "$swiftc",
+      "hide": true
+    },
+    {
+      "label": "xcode: build iOS",
+      "type": "shell",
+      "command": "xcodebuild",
+      "args": ["build", "-scheme", "JWW Swift Toolkit-Package", "-destination", "platform=iOS Simulator,OS=latest,name=iPhone 17 Pro"],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": "$swiftc",
+      "hide": true
+    },
+    {
+      "label": "xcode: build tvOS",
+      "type": "shell",
+      "command": "xcodebuild",
+      "args": ["build", "-scheme", "JWW Swift Toolkit-Package", "-destination", "platform=tvOS Simulator,OS=latest,name=Apple TV"],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": "$swiftc",
+      "hide": true
+    },
+    {
+      "label": "xcode: build visionOS",
+      "type": "shell",
+      "command": "xcodebuild",
+      "args": ["build", "-scheme", "JWW Swift Toolkit-Package", "-destination", "platform=visionOS Simulator,OS=latest,name=Apple Vision Pro"],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": "$swiftc",
+      "hide": true
+    },
+    {
+      "label": "xcode: build watchOS",
+      "type": "shell",
+      "command": "xcodebuild",
+      "args": ["build", "-scheme", "JWW Swift Toolkit-Package", "-destination", "platform=watchOS Simulator,OS=latest,name=Apple Watch Series 11 (42mm)"],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": "$swiftc",
+      "hide": true
+    },
+    {
+      "label": "swift: clean",
+      "type": "swift",
+      "args": ["package", "clean"],
+      "cwd": "${workspaceFolder}",
+      "detail": "Remove SwiftPM build products",
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "showReuseMessage": true,
+        "clear": false
+      }
+    },
+    {
+      "label": "SwiftLint: Fix workspace",
+      "type": "shell",
+      "command": "swiftlint",
+      "args": ["--fix", "--config", ".swiftlint.yml"],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "showReuseMessage": true,
+        "clear": false
+      }
+    },
+    {
+      "label": "SwiftLint: Lint workspace",
+      "type": "shell",
+      "command": "swiftlint",
+      "args": ["lint", "--config", ".swiftlint.yml"],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": {
+        "owner": "swiftlint",
+        "fileLocation": "absolute",
+        "pattern": {
+          "regexp": "^(.+):(\\d+):(\\d+): (warning|error): (.*)$",
+          "file": 1,
+          "line": 2,
+          "column": 3,
+          "severity": 4,
+          "message": 5
+        }
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "showReuseMessage": true,
+        "clear": false
+      }
+    }
+  ],
+  "test": "swift: test"
+}
