@@ -5,11 +5,11 @@ import PackageDescription
 let package = Package(
     name: "JWW Swift Toolkit",
     platforms: [
-        .iOS(.v18),
-        .macOS(.v15),
-        .tvOS(.v18),
-        .visionOS(.v1),
-        .watchOS(.v10)
+        .iOS("18.4"),
+        .macOS("15.4"),
+        .tvOS("18.4"),
+        .visionOS("2.4"),
+        .watchOS("11.4")
     ],
     products: [
         .library(
@@ -33,6 +33,10 @@ let package = Package(
         .library(
             name: "JWWTestExtensions",
             targets: ["JWWTestExtensions"]
+        ),
+        .library(
+            name: "JWWCoreDataTestSupport",
+            targets: ["JWWCoreDataTestSupport"]
         ),
         .library(
             name: "JWWNetworking",
@@ -61,7 +65,7 @@ let package = Package(
         ),
         .testTarget(
             name: "JWWCoreDataTests",
-            dependencies: ["JWWCoreData", "JWWCore"],
+            dependencies: ["JWWCoreData", "JWWCore", "JWWCoreDataTestSupport"],
             resources: [
                 .process("Resources")
             ],
@@ -72,6 +76,14 @@ let package = Package(
         .testTarget(
             name: "JWWTestExtensionsTests",
             dependencies: ["JWWTestExtensions"],
+        ),
+        .target(
+            name: "JWWCoreDataTestSupport",
+            dependencies: ["JWWCoreData"],
+        ),
+        .testTarget(
+            name: "JWWCoreDataTestSupportTests",
+            dependencies: ["JWWCoreDataTestSupport", "JWWCoreData"],
         ),
         .target(
             name: "JWWNetworking",
