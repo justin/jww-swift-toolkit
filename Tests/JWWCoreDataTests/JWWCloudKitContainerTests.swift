@@ -1,60 +1,44 @@
-import XCTest
-import Combine
 import CoreData
+import JWWCoreDataTestSupport
+import Testing
 @testable import JWWCoreData
 
 /// Tests to validate the `JWWCloudKitContainer` type.
-final class JWWCloudKitContainerTests: XCTestCase {
-    /// Test container
-    private var sut: JWWCloudKitContainer!
-
-    private var subscriptions: Set<AnyCancellable> = []
-
-    override func setUpWithError() throws {
-        try super.setUpWithError()
-
-        sut = JWWCloudKitContainer(name: "Test Database", bundle: .module)
-
-        let loadingEx = expectation(description: "loading persistent store")
-
-        sut.loadPersistentStores()
-            .sink(receiveCompletion: { (completion) in
-                switch completion {
-                case .finished:
-                    loadingEx.fulfill()
-                case .failure(let error):
-                    XCTFail("Error initialized data store: \(error)")
-                }
-            },
-            receiveValue: { _ in })
-            .store(in: &subscriptions)
-
-        wait(for: [loadingEx], timeout: 1.0)
-    }
-
-    override func tearDownWithError() throws {
-        try super.tearDownWithError()
-
-        try sut.reset()
-        sut = nil
-        subscriptions.removeAll()
-    }
-
+@MainActor
+final class JWWCloudKitContainerTests {
     /// Validate our main context is properly named.
-    func testIsLoadedPublisher() throws {
+    @Test
+    func `main context is configured after loading`() async throws {
         let expectedName = "UI / Main thread context"
 
-        let result = sut.mainObjectContext.name
+        try await CoreDataTestStore<JWWCloudKitContainerTestFactory>.withStore(storage: .sqlite) { sut in
+            let result = sut.mainObjectContext.name
 
-        XCTAssertEqual(result, expectedName)
+            #expect(result == expectedName)
+        }
     }
 
     /// Validate a new background context is properly named.
-    func testBackgroundContextNaming() throws {
+    @Test
+    func `background context is named`() async throws {
         let expectedName = "Persistent Container Background Context"
 
-        let result = try XCTUnwrap(sut.newBackgroundContext().name)
+        try await CoreDataTestStore<JWWCloudKitContainerTestFactory>.withStore(storage: .sqlite) { sut in
+            let result = try #require(sut.newBackgroundContext().name)
 
-        XCTAssertEqual(result, expectedName)
+            #expect(result == expectedName)
+        }
+    }
+}
+
+private enum JWWCloudKitContainerTestFactory: CoreDataTestContainerFactory {
+    static func makeContainer(for profile: PersistentStoreProfile) throws -> JWWCloudKitContainer {
+        let container = JWWCloudKitContainer(name: "Test Database", bundle: .module)
+        container.persistentStoreDescriptions = [try profile.persistentStoreDescription()]
+        return container
+    }
+
+    static func load(_ container: JWWCloudKitContainer) async throws {
+        try await container.loadPersistentStores()
     }
 }

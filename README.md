@@ -15,6 +15,8 @@ networking, UIKit, AppKit, and test-support tasks. It supports iOS 18.4+, macOS
 - `JWWCore`: Foundation and Swift extensions, Codable helpers, logging, and
   formatting utilities.
 - `JWWCoreData`: Core Data container, managed-object, and context helpers.
+- `JWWCoreDataTestSupport`: scoped true-memory and temporary-SQLite resources
+  for Core Data tests, including typed app-container composition.
 - `JWWNetworking`: request construction, HTTP client support, authentication,
   headers, content types, and network errors.
 - `JWWTestExtensions`: XCTest assertions, publisher-awaiting helpers, UI-test
@@ -24,8 +26,21 @@ networking, UIKit, AppKit, and test-support tasks. It supports iOS 18.4+, macOS
 - `JWWAppKit`: AppKit conveniences for views, collection views, storyboards,
   and XIB-backed types.
 
-`JWWSwiftToolkit` is an umbrella product that exposes every module. Individual
-products are available when an application needs a narrower dependency.
+`JWWSwiftToolkit` is an umbrella product for the production modules. Individual
+products are available when an application needs a narrower dependency; test
+support remains an explicit test-target dependency.
+
+## Core Data Test Support
+
+`JWWCoreDataTestSupport` provides two physical stores with explicit lifecycles:
+true in-memory stores for lightweight tests, and UUID-owned temporary SQLite
+stores for tests that need SQLite behavior. Use typed `CoreDataTestStore`
+composition when a test needs an application's concrete persistent-container
+subclass; a `CoreDataTestContainerFactory` receives the generated
+`PersistentStoreProfile` and owns application-specific loading. The optional
+`CoreDataTestStoreTrait` is available on compiler versions 6.1 and later for
+context-level Swift Testing cases. It deliberately does not replace typed
+container composition.
 
 ## Adding the Package
 

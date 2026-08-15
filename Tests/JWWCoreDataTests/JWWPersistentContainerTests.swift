@@ -1,59 +1,72 @@
-import XCTest
-import Combine
 import CoreData
+import JWWCoreDataTestSupport
+import Testing
 @testable import JWWCoreData
 
 /// Tests to validate the `JWWPersistentContainer` type.
-final class JWWPersistentContainerTests: XCTestCase {
-    /// Test container
-    private var sut: JWWPersistentContainer!
-
-    private var subscriptions: Set<AnyCancellable> = []
-
-    override func setUpWithError() throws {
-        try super.setUpWithError()
-
-        sut = JWWPersistentContainer(name: "Test Database", bundle: .module)
-
-        let loadingEx = expectation(description: "loading persistent store")
-
-        sut.loadPersistentStores()
-            .sink(receiveCompletion: { (completion) in
-                switch completion {
-                case .finished:
-                    loadingEx.fulfill()
-                case .failure(let error):
-                    XCTFail("Error initialized data store: \(error)")
-                }
-            },
-            receiveValue: { _ in })
-            .store(in: &subscriptions)
-
-        wait(for: [loadingEx], timeout: 1.0)
-    }
-
-    override func tearDownWithError() throws {
-        try super.tearDownWithError()
-
-        sut = nil
-        subscriptions.removeAll()
-    }
-
+@MainActor
+final class JWWPersistentContainerTests {
     /// Validate our main context is properly named.
-    func testIsLoadedPublisher() throws {
+    @Test
+    func `main context is configured after loading`() async throws {
         let expectedName = "UI / Main thread context"
 
-        let result = sut.mainObjectContext.name
+        try await CoreDataTestStore<JWWPersistentContainerTestFactory>.withStore(storage: .sqlite) { sut in
+            let result = sut.mainObjectContext.name
 
-        XCTAssertEqual(result, expectedName)
+            #expect(result == expectedName)
+        }
     }
 
     /// Validate a new background context is properly named.
-    func testBackgroundContextNaming() throws {
+    @Test
+    func `background context is named`() async throws {
         let expectedName = "Persistent Container Background Context"
 
-        let result = try XCTUnwrap(sut.newBackgroundContext().name)
+        try await CoreDataTestStore<JWWPersistentContainerTestFactory>.withStore(storage: .sqlite) { sut in
+            let result = try #require(sut.newBackgroundContext().name)
 
-        XCTAssertEqual(result, expectedName)
+            #expect(result == expectedName)
+        }
+    }
+
+    /// Validate a failed store load reports the same error through the lifecycle state.
+    @Test
+    func `failed store loading publishes the original error`() async throws {
+        let container = JWWPersistentContainer(name: "Test Database", bundle: .module)
+        let invalidStoreURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: invalidStoreURL, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: invalidStoreURL) }
+
+        container.persistentStoreDescriptions = [NSPersistentStoreDescription(url: invalidStoreURL)]
+
+        let error = await #expect(throws: (any Error).self) {
+            try await container.loadPersistentStores()
+        }
+        let loadingError = try #require(error)
+
+        guard case let .failed(stateError) = container.state else {
+            Issue.record("Expected the container to enter the failed state.")
+            return
+        }
+
+        let expectedError = loadingError as NSError
+        let actualError = stateError as NSError
+        #expect(actualError.domain == expectedError.domain)
+        #expect(actualError.code == expectedError.code)
+        #expect(container.mainObjectContext.name == nil)
+    }
+}
+
+private enum JWWPersistentContainerTestFactory: CoreDataTestContainerFactory {
+    static func makeContainer(for profile: PersistentStoreProfile) throws -> JWWPersistentContainer {
+        let container = JWWPersistentContainer(name: "Test Database", bundle: .module)
+        container.persistentStoreDescriptions = [try profile.persistentStoreDescription()]
+        return container
+    }
+
+    static func load(_ container: JWWPersistentContainer) async throws {
+        try await container.loadPersistentStores()
     }
 }

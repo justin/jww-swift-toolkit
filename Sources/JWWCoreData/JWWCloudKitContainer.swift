@@ -1,5 +1,4 @@
 import Foundation
-import Combine
 import CoreData
 import JWWCore
 import os
@@ -7,21 +6,13 @@ import os
 /// A container that encapsulates the Core Data stack in your app.
 open class JWWCloudKitContainer: NSPersistentCloudKitContainer, JWWPersistentContainerProviding, @unchecked Sendable {
     /// The current loading state of the persistent stores managed by the container.
-    @Published public var state: NSPersistentContainer.State = .inactive
+    @MainActor public var state: NSPersistentContainer.State = .inactive
 
-    /// Publisher that fires when the persistent container has loaded its attached stores.
-    public private(set) lazy var isLoadedPublisher: AnyPublisher<Void, Never> = {
-        $state
-            .drop(while: { state in
-                state != .loaded
-            })
-            .map({ _ in () })
-            .share()
-            .eraseToAnyPublisher()
-    }()
-
-    private var saveNotificationSubscriber: AnyCancellable?
-    private var persistentStoreLoadingSubscriber: AnyCancellable?
+    // JWW: 08/15/26 This token is written and read only on the main actor, which is what forces
+    // `deinit` to be isolated as well. Isolated deinit is what sets this package's platform
+    // minimums (iOS 18.4 / macOS 15.4 / tvOS 18.4 / visionOS 2.4 / watchOS 11.4); lowering any of
+    // them stops this file from compiling.
+    @MainActor private var saveNotificationObserver: NSObjectProtocol?
 
     // MARK: Initialization
     // ====================================
@@ -32,6 +23,7 @@ open class JWWCloudKitContainer: NSPersistentCloudKitContainer, JWWPersistentCon
     /// - Parameters:
     ///   - name: The name used by the persistent container
     ///   - bundle: The bundle to search for the managed object model.
+    @MainActor
     public required init(name: String, bundle: Bundle) {
         guard let url = bundle.url(forResource: name, withExtension: "momd") else {
             fatalError("Failed to find model \(name) in bundle.")
@@ -43,15 +35,13 @@ open class JWWCloudKitContainer: NSPersistentCloudKitContainer, JWWPersistentCon
 
         super.init(name: name, managedObjectModel: model)
 
-        configureSaveNotifications()
-        persistentStoreLoadingSubscriber = isLoadedPublisher
-            .receive(on: ImmediateScheduler.shared)
-            .sink(receiveValue: { [self] _ in
-                viewContext.name = "UI / Main thread context"
-                viewContext.automaticallyMergesChangesFromParent = true
-                viewContext.shouldDeleteInaccessibleFaults = true
-                viewContext.mergePolicy = NSMergePolicy(merge: .mergeByPropertyObjectTrumpMergePolicyType)
-            })
+    }
+
+    @MainActor
+    deinit {
+        if let saveNotificationObserver {
+            NotificationCenter.default.removeObserver(saveNotificationObserver)
+        }
     }
 
     // MARK: Subclass Methods
@@ -72,21 +62,42 @@ open class JWWCloudKitContainer: NSPersistentCloudKitContainer, JWWPersistentCon
     // Public Methods
     // ====================================
 
-    /// Returns a publisher that wraps the `loadPersistentStores(completionHandler:)` function.
-    ///
-    /// - Returns: An `AnyPublisher` wrapping this publisher.
-    public func loadPersistentStores() -> AnyPublisher<[NSPersistentStoreDescription], Error> {
-        Publishers.MergeMany(persistentStoreDescriptions.map(load(store:)))
-            .collect()
-            .handleEvents(receiveCompletion: { completion in
-                switch completion {
-                case .failure(let error):
-                    self.state = .failed(error)
-                case .finished:
-                    self.state = .loaded
+    /// Loads the persistent stores.
+    public func loadPersistentStores() async throws {
+        do {
+            for store in persistentStoreDescriptions {
+                try await load(store: store)
+            }
+
+            await completeLoading()
+        } catch {
+            await recordLoadingFailure(error)
+            throw error
+        }
+    }
+
+    private func load(store: NSPersistentStoreDescription) async throws {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            persistentStoreCoordinator.addPersistentStore(with: store) { (_, error) in
+                if let error {
+                    return continuation.resume(throwing: error)
                 }
-            })
-            .eraseToAnyPublisher()
+
+                return continuation.resume(returning: ())
+            }
+        }
+    }
+
+    @MainActor
+    private func completeLoading() {
+        configureSaveNotifications()
+        configureViewContext()
+        state = .loaded
+    }
+
+    @MainActor
+    private func recordLoadingFailure(_ error: Error) {
+        state = .failed(error)
     }
 
     // MARK: Private / Convenience
@@ -95,22 +106,35 @@ open class JWWCloudKitContainer: NSPersistentCloudKitContainer, JWWPersistentCon
     // ====================================
 
     /// Listen for changes on background contexts and merge them into the main context.
+    @MainActor
     private func configureSaveNotifications() {
-        saveNotificationSubscriber = NotificationCenter.default.publisher(for: .NSManagedObjectContextDidSave)
-            .receive(on: RunLoop.main)
-            .sink { [self] (notification) in
-                guard let notificationContext = notification.object as? NSManagedObjectContext else {
-                    assertionFailure("Unexpected object passed through context notification.")
-                    return
-                }
+        guard saveNotificationObserver == nil else {
+            return
+        }
 
-                guard notificationContext !== viewContext else {
-                    return
-                }
-
-                viewContext.perform { [viewContext] in
-                    viewContext.mergeChanges(fromContextDidSave: notification)
-                }
+        saveNotificationObserver = NotificationCenter.default.addObserver(
+            forName: .NSManagedObjectContextDidSave,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard let self,
+                  let notificationContext = notification.object as? NSManagedObjectContext else {
+                return
             }
+
+            guard notificationContext !== self.viewContext else {
+                return
+            }
+
+            self.viewContext.mergeChanges(fromContextDidSave: notification)
+        }
+    }
+
+    @MainActor
+    private func configureViewContext() {
+        viewContext.name = "UI / Main thread context"
+        viewContext.automaticallyMergesChangesFromParent = true
+        viewContext.shouldDeleteInaccessibleFaults = true
+        viewContext.mergePolicy = NSMergePolicy(merge: .mergeByPropertyObjectTrumpMergePolicyType)
     }
 }

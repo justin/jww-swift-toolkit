@@ -1,28 +1,7 @@
 import Foundation
 import CoreData
-import Combine
-import os
 
 public extension NSPersistentContainer {
-    /// The supported storage types.
-    enum Storage: String {
-        /// Load the container using in-memory storage.
-        case memory
-
-        /// Load the container using a SQLite database.
-        case persisted
-
-        /// Returns the URL where the store will keep its data.
-        public var url: URL {
-            switch self {
-            case .memory:
-                return URL(fileURLWithPath: "/dev/null")
-            case .persisted:
-                return NSPersistentContainer.defaultDirectoryURL().appendingPathComponent("Storage.sqlite")
-            }
-        }
-    }
-
     /// The potential states the persistent container can be in.
     enum State: Equatable {
         /// The container has not loaded its stores.
@@ -50,45 +29,24 @@ public extension NSPersistentContainer {
 /// Protocol that declares the extensions and custom attributes
 public protocol JWWPersistentContainerProviding: AnyObject {
     /// The current loading state of the persistent stores managed by the container.
-    var state: NSPersistentContainer.State { get set }
-
-    /// Publisher that fires when the persistent container has loaded its attached stores.
-    var isLoadedPublisher: AnyPublisher<Void, Never> { get }
+    @MainActor var state: NSPersistentContainer.State { get set }
 
     /// The main thread / UI managed object context.
-    var mainObjectContext: NSManagedObjectContext { get }
-
-    /// Perform a background task against the loaded persistent container.
-    @discardableResult
-    func performBackgroundTask(andSave shouldSave: Bool,
-                               transactionAuthor: String?,
-                               contextName name: String?,
-                               closure: @escaping (NSManagedObjectContext) -> Void) -> Future<Void, Error>
-
-    /// Returns a publisher that wraps the `loadPersistentStores(completionHandler:)` function.
-    ///
-    /// - Returns: An `AnyPublisher` wrapping this publisher.
-    func loadPersistentStores() -> AnyPublisher<[NSPersistentStoreDescription], Error>
-
-    /// Load a single persistent store.
-    func load(store: NSPersistentStoreDescription) -> AnyPublisher<NSPersistentStoreDescription, Error>
+    @MainActor var mainObjectContext: NSManagedObjectContext { get }
 
     /// Load all persistent stores.
-    func loadPersistentStores() async throws -> NSPersistentContainer.State
+    func loadPersistentStores() async throws
 
     /// Unload any persistent stores and truncate the data inside.
     func reset() throws
 
-    /// Load an individual persistent store.
-    ///
-    /// - Parameter store: The persistent store to load.
-    func load(store: NSPersistentStoreDescription) async throws -> NSPersistentContainer.State
-
     @available(iOS 15.0.0, macOS 12.0.0, tvOS 15.0.0, watchOS 8.0.0, *)
-    func performBackgroundTask<T>(andSave shouldSave: Bool,
-                                  transactionAuthor: String?,
-                                  contextName name: String?,
-                                  block: @escaping (NSManagedObjectContext) throws -> T) async rethrows -> T
+    func performBackgroundTask<T: Sendable>(
+        andSave shouldSave: Bool,
+        transactionAuthor: String?,
+        contextName name: String?,
+        block: @escaping @Sendable (NSManagedObjectContext) throws -> T
+    ) async rethrows -> T
 }
 
 // MARK: Default Implementations
@@ -96,16 +54,18 @@ public protocol JWWPersistentContainerProviding: AnyObject {
 // Default Implementations
 // ====================================
 public extension JWWPersistentContainerProviding where Self: NSPersistentContainer {
-    var mainObjectContext: NSManagedObjectContext {
+    @MainActor var mainObjectContext: NSManagedObjectContext {
         viewContext
     }
 
     @available(iOS 15.0.0, macOS 12.0.0, tvOS 15.0.0, watchOS 8.0.0, *)
-    func performBackgroundTask<T>(andSave shouldSave: Bool,
-                                  transactionAuthor: String? = nil,
-                                  contextName name: String? = nil,
-                                  block: @escaping (NSManagedObjectContext) throws -> T) async rethrows -> T {
-        try await self.performBackgroundTask { context in
+    func performBackgroundTask<T: Sendable>(
+        andSave shouldSave: Bool,
+        transactionAuthor: String? = nil,
+        contextName name: String? = nil,
+        block: @escaping @Sendable (NSManagedObjectContext) throws -> T
+    ) async rethrows -> T {
+        try await self.performBackgroundTask { @Sendable context in
             context.transactionAuthor = transactionAuthor
             context.name = name
             let result = try block(context)
@@ -119,68 +79,39 @@ public extension JWWPersistentContainerProviding where Self: NSPersistentContain
         }
     }
 
-    @discardableResult
-    func performBackgroundTask(andSave shouldSave: Bool,
-                               transactionAuthor: String? = nil,
-                               contextName name: String? = nil,
-                               closure: @escaping (NSManagedObjectContext) -> Void) -> Future<Void, Error> {
-        return Future { promise in
-            self.performBackgroundTask { context in
-                context.transactionAuthor = transactionAuthor
-                context.name = name
-                closure(context)
-
-                guard shouldSave, context.hasChanges else {
-                    promise(.success(()))
-                    return
-                }
-
-                do {
-                    promise(.success(try context.save()))
-                } catch let error as NSError {
-                    context.rollback()
-                    Logger(category: .database).error("Error inserting default assets \(error.userInfo)")
-                    promise(.failure(error))
-                }
+    func loadPersistentStores() async throws {
+        do {
+            for store in persistentStoreDescriptions {
+                try await load(store: store)
             }
+
+            await completeLoading()
+        } catch {
+            await recordLoadingFailure(error)
+            throw error
         }
     }
 
-    @discardableResult
-    func loadPersistentStores() async throws -> NSPersistentContainer.State {
-        for store in persistentStoreDescriptions {
-            _ = try await load(store: store)
-        }
-
-        state = .loaded
-        return state
-    }
-
-    @discardableResult
-    func load(store: NSPersistentStoreDescription) async throws -> NSPersistentContainer.State {
-        return try await withCheckedThrowingContinuation({ continuation in
+    private func load(store: NSPersistentStoreDescription) async throws {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             persistentStoreCoordinator.addPersistentStore(with: store) { (_, error) in
                 if let error {
-                    self.state = .failed(error)
-                    continuation.resume(throwing: error)
+                    return continuation.resume(throwing: error)
                 }
 
-                self.state = .loaded
-                continuation.resume(returning: .loaded)
+                continuation.resume(returning: ())
             }
-        })
+        }
     }
 
-    func load(store: NSPersistentStoreDescription) -> AnyPublisher<NSPersistentStoreDescription, Error> {
-        Future { [self] promise in
-            persistentStoreCoordinator.addPersistentStore(with: store) { (_, error) in
-                if let error = error {
-                    return promise(.failure(error))
-                }
+    @MainActor
+    private func completeLoading() {
+        state = .loaded
+    }
 
-                return promise(.success((store)))
-            }
-        }.eraseToAnyPublisher()
+    @MainActor
+    private func recordLoadingFailure(_ error: Error) {
+        state = .failed(error)
     }
 
     // MARK: Unloading / Destorying Persistent Stores
