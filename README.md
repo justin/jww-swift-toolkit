@@ -7,8 +7,8 @@
 Reusable Swift utilities for Apple-platform applications.
 
 The package provides focused modules for common Foundation, Core Data,
-networking, UIKit, AppKit, and test-support tasks. It supports iOS 18+, macOS
-15+, tvOS 18+, visionOS 1+, and watchOS 10+.
+networking, UIKit, AppKit, and test-support tasks. It supports iOS 18.4+, macOS
+15.4+, tvOS 18.4+, visionOS 2.4+, and watchOS 11.4+.
 
 ## Modules
 
