@@ -2,6 +2,7 @@
   "recommendations": [
     "swiftlang.swift-vscode",
     "Gruntfuggly.triggertaskonsave",
-    "vadimcn.vscode-lldb"
+    "vadimcn.vscode-lldb",
+    "justinwme.swiftlint-vsx"
   ]
 }
