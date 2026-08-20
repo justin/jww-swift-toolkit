@@ -66,6 +66,11 @@ swiftlint lint --config .swiftlint.yml
 The repository also includes VS Code tasks for building, testing, linting, and
 running the test suite across the supported Apple platforms.
 
+## Documentation
+
+The generated API reference is published at
+[justin.github.io/jww-swift-toolkit/documentation](https://justin.github.io/jww-swift-toolkit/documentation/).
+
 ## License
 
 JWW Swift Toolkit is available under the [MIT License](LICENSE.md).

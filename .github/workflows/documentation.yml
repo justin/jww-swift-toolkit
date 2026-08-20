@@ -1,0 +1,90 @@
+name: Documentation
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'Package.swift'
+      - 'Package.resolved'
+      - 'README.md'
+      - 'Documentation/**'
+      - 'Sources/**'
+      - '.github/workflows/documentation.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'Package.swift'
+      - 'Package.resolved'
+      - 'README.md'
+      - 'Documentation/**'
+      - 'Sources/**'
+      - '.github/workflows/documentation.yml'
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: documentation
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build documentation
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: ^26.0
+
+      - name: Configure Pages
+        id: pages
+        uses: actions/configure-pages@v6
+        with:
+          enablement: true
+
+      - name: Generate DocC reference
+        run: |
+          swift package --allow-writing-to-directory "$RUNNER_TEMP/documentation" \
+            generate-documentation \
+            --target JWWCore \
+            --target JWWCoreData \
+            --target JWWCoreDataTestSupport \
+            --target JWWNetworking \
+            --target JWWTestExtensions \
+            --target JWWAppKit \
+            --target JWWUIKit \
+            --enable-experimental-combined-documentation \
+            --disable-indexing \
+            --output-path "$RUNNER_TEMP/documentation" \
+            --hosting-base-path "${{ steps.pages.outputs.base_path }}" \
+            --source-service github \
+            --source-service-base-url https://github.com/justin/jww-swift-toolkit/blob/main \
+            --checkout-path "$GITHUB_WORKSPACE"
+
+      - name: Set documentation entry point
+        run: cp Documentation/index.html "$RUNNER_TEMP/documentation/index.html"
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: ${{ runner.temp }}/documentation
+
+  deploy:
+    name: Deploy documentation
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5
