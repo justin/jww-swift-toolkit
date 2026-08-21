@@ -54,6 +54,8 @@ jobs:
           spm-package: ./
           scheme: JWW Swift Toolkit-Package
           destination: ${{ matrix.destination }}
+          skip-package-plugin-validation: true
+          skip-macro-validation: true
           action: test
 
   strict-concurrency:
@@ -75,4 +77,6 @@ jobs:
             -destination "platform=macOS" \
             -only-testing:JWWCoreDataTests \
             -only-testing:JWWCoreDataTestSupportTests \
+            -skipPackagePluginValidation \
+            -skipMacroValidation \
             SWIFT_STRICT_CONCURRENCY=complete
