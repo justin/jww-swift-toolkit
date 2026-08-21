@@ -9,7 +9,7 @@ public protocol AuthenticationProvider: Actor {
     func refreshAccessToken(refreshToken: String) async throws -> String
 }
 
-public protocol HTTPClientDelegate: Sendable {
+public protocol HTTPClientDelegate: AnyObject, Sendable {
     func client(_ client: HTTPClient, willSendRequest request: inout URLRequest) async throws
 }
 

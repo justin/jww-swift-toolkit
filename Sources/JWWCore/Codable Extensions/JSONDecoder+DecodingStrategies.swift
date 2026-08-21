@@ -13,8 +13,8 @@ public extension JSONDecoder {
 }
 
 public extension JSONDecoder.DateDecodingStrategy {
-    @available(*, renamed: "iso8601WithFractionalSeconds")
     /// Custom date decoding strategy that will attempt to decode a date formatted with ISO8601 fractional second precision.
+    @available(*, renamed: "iso8601WithFractionalSeconds")
     static let iso8601milliseconds = iso8601WithFractionalSeconds
 
     /// Custom date decoding strategy that will attempt to decode a date formatted with ISO8601 fractional second precision.

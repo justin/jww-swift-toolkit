@@ -4,11 +4,11 @@ import XCTest
 /// Test helper that allows for injection of fixture data into a `URLSession` instance instead of hitting the network
 /// directly.
 public final class MockURLProtocol: URLProtocol {
-    public override class func canonicalRequest(for request: URLRequest) -> URLRequest {
+    public override static func canonicalRequest(for request: URLRequest) -> URLRequest {
         return request
     }
 
-    public override class func canInit(with request: URLRequest) -> Bool {
+    public override static func canInit(with request: URLRequest) -> Bool {
         true
     }
 
@@ -49,22 +49,22 @@ public final class MockURLProtocol: URLProtocol {
     // ====================================
 
     /// Add a new stub response to the list of returnable responses for a request.
-    public class func addStub(_ stub: NetworkResponseStub) {
+    public static func addStub(_ stub: NetworkResponseStub) {
         Storage.shared.addStub(stub)
     }
 
     /// Remove a stub response from the list of returnable responses for a request.
-    public class func removeStub(_ stub: NetworkResponseStub) {
+    public static func removeStub(_ stub: NetworkResponseStub) {
         Storage.shared.removeStub(stub)
     }
 
     /// Remove all stub responses.
-    public class func removeAllStubs() {
+    public static func removeAllStubs() {
         Storage.shared.removeAllStubs()
     }
 
     /// Find a stub response that matches a given `URLRequest.url`.
-    public class func stub(for request: URLRequest) -> NetworkResponseStub? {
+    public static func stub(for request: URLRequest) -> NetworkResponseStub? {
         Storage.shared.stub(for: request)
     }
 

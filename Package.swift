@@ -52,19 +52,32 @@ let package = Package(
         )
     ],
     dependencies: [
-        .package(url: "https://github.com/swiftlang/swift-docc-plugin", from: "1.4.3")
+        // Generates documentation for project
+        .package(url: "https://github.com/swiftlang/swift-docc-plugin", from: "1.4.3"),
+
+        // SwiftLint build tool plugin for code quality
+        .package(url: "https://github.com/SimplyDanny/SwiftLintPlugins", from: "0.64.0")
     ],
     targets: [
         .target(
             name: "JWWCore",
+            plugins: [
+                .plugin(name: "SwiftLintBuildToolPlugin", package: "SwiftLintPlugins")
+            ],
         ),
         .testTarget(
             name: "JWWCoreTests",
             dependencies: ["JWWCore"],
+            plugins: [
+                .plugin(name: "SwiftLintBuildToolPlugin", package: "SwiftLintPlugins")
+            ]
         ),
         .target(
             name: "JWWCoreData",
             dependencies: ["JWWCore"],
+            plugins: [
+                .plugin(name: "SwiftLintBuildToolPlugin", package: "SwiftLintPlugins")
+            ]
         ),
         .testTarget(
             name: "JWWCoreDataTests",
@@ -72,43 +85,76 @@ let package = Package(
             resources: [
                 .process("Resources")
             ],
+            plugins: [
+                .plugin(name: "SwiftLintBuildToolPlugin", package: "SwiftLintPlugins")
+            ]
         ),
         .target(
             name: "JWWTestExtensions",
+            plugins: [
+                .plugin(name: "SwiftLintBuildToolPlugin", package: "SwiftLintPlugins")
+            ]
         ),
         .testTarget(
             name: "JWWTestExtensionsTests",
             dependencies: ["JWWTestExtensions"],
+            plugins: [
+                .plugin(name: "SwiftLintBuildToolPlugin", package: "SwiftLintPlugins")
+            ]
         ),
         .target(
             name: "JWWCoreDataTestSupport",
             dependencies: ["JWWCoreData"],
+            plugins: [
+                .plugin(name: "SwiftLintBuildToolPlugin", package: "SwiftLintPlugins")
+            ]
         ),
         .testTarget(
             name: "JWWCoreDataTestSupportTests",
             dependencies: ["JWWCoreDataTestSupport", "JWWCoreData"],
+            plugins: [
+                .plugin(name: "SwiftLintBuildToolPlugin", package: "SwiftLintPlugins")
+            ]
         ),
         .target(
             name: "JWWNetworking",
             dependencies: ["JWWCore"],
+            plugins: [
+                .plugin(name: "SwiftLintBuildToolPlugin", package: "SwiftLintPlugins")
+            ]
         ),
         .testTarget(
             name: "JWWNetworkingTests",
             dependencies: ["JWWNetworking", "JWWTestExtensions"],
+            plugins: [
+                .plugin(name: "SwiftLintBuildToolPlugin", package: "SwiftLintPlugins")
+            ]
         ),
         .target(
             name: "JWWAppKit",
+            plugins: [
+                .plugin(name: "SwiftLintBuildToolPlugin", package: "SwiftLintPlugins")
+            ]
         ),
         .testTarget(
             name: "JWWAppKitTests",
             dependencies: ["JWWAppKit"],
+            plugins: [
+                .plugin(name: "SwiftLintBuildToolPlugin", package: "SwiftLintPlugins")
+            ]
         ),
         .target(
             name: "JWWUIKit",
+            plugins: [
+                .plugin(name: "SwiftLintBuildToolPlugin", package: "SwiftLintPlugins")
+            ]
         ),
         .testTarget(
             name: "JWWUIKitTests",
             dependencies: ["JWWUIKit"],
+            plugins: [
+                .plugin(name: "SwiftLintBuildToolPlugin", package: "SwiftLintPlugins")
+            ]
         )
     ]
 )

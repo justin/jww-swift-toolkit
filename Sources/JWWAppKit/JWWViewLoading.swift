@@ -3,7 +3,8 @@ import AppKit
 
 extension NSView {
     @MainActor
-    @propertyWrapper public struct JWWViewLoading<Value> {
+    @propertyWrapper
+    public struct JWWViewLoading<Value> {
         private var storedValue: Value?
 
         /// Undocumented but widespread subscript method for accessing the wrapped object. This
