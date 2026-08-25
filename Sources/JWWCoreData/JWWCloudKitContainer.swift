@@ -1,6 +1,5 @@
 import Foundation
 import CoreData
-import JWWCore
 import os
 
 /// A container that encapsulates the Core Data stack in your app.

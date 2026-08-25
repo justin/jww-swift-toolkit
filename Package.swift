@@ -74,14 +74,13 @@ let package = Package(
         ),
         .target(
             name: "JWWCoreData",
-            dependencies: ["JWWCore"],
             plugins: [
                 .plugin(name: "SwiftLintBuildToolPlugin", package: "SwiftLintPlugins")
             ]
         ),
         .testTarget(
             name: "JWWCoreDataTests",
-            dependencies: ["JWWCoreData", "JWWCore", "JWWCoreDataTestSupport"],
+            dependencies: ["JWWCoreData", "JWWCoreDataTestSupport"],
             resources: [
                 .process("Resources")
             ],
@@ -125,7 +124,7 @@ let package = Package(
         ),
         .testTarget(
             name: "JWWNetworkingTests",
-            dependencies: ["JWWNetworking", "JWWTestExtensions"],
+            dependencies: ["JWWNetworking", "JWWCore", "JWWTestExtensions"],
             plugins: [
                 .plugin(name: "SwiftLintBuildToolPlugin", package: "SwiftLintPlugins")
             ]
