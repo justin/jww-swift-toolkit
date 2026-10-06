@@ -45,7 +45,9 @@ public protocol NetworkRequestTemplate<Output, Failure>: Sendable {
     var headers: [HTTPRequestHeaderKey: String] { get }
 
     /// Decode the passed in Data and return a valid response object.
-    /// - Parameter response: The `Data` object to decode.
+    /// - Parameters:
+    ///   - response: The `Data` object to decode.
+    ///   - decoder: The decoder configured by the client.
     ///
     /// - Returns: A decoded object of type `ResponseObject`.
     static func decode(response: Data, with decoder: JSONDecoder) throws -> (Output, DecodingContext?)

@@ -65,3 +65,23 @@ struct InvalidNetworkRequest: NetworkRequestTemplate {
         throw JWWNetworkError.invalidResponse(nil)
     }
 }
+
+class BaseDecodingRequest: StaticNetworkRequest, @unchecked Sendable {
+    typealias Output = NetworkResponseFake
+    let url: URL
+    let method = HTTPMethod.get
+    let body: Data? = nil
+    let headers: [HTTPRequestHeaderKey: String] = [:]
+
+    init(url: URL) { self.url = url }
+
+    class func decode(response: Data, with decoder: JSONDecoder) throws -> (NetworkResponseFake, (any DecodingContext)?) {
+        (NetworkResponseFake(value: "base"), nil)
+    }
+}
+
+final class SubclassDecodingRequest: BaseDecodingRequest, @unchecked Sendable {
+    override static func decode(response: Data, with decoder: JSONDecoder) throws -> (NetworkResponseFake, (any DecodingContext)?) {
+        (NetworkResponseFake(value: "subclass"), nil)
+    }
+}

@@ -60,6 +60,7 @@ public actor HTTPClient {
     /// - Parameters:
     ///   - configuration: The network configuration to use for composing and sending requests.
     ///   - session: The `URLSession` instance for making requests.
+    ///   - delegate: Optional request preparation performed before every attempt.
     public init(configuration: Configuration, session: URLSession = .shared, delegate: HTTPClientDelegate? = nil) {
         self.session = session
         self.configuration = configuration
@@ -75,38 +76,65 @@ public actor HTTPClient {
     @discardableResult
     public func send<T: NetworkRequestTemplate>(template: T) async throws(JWWNetworkError) -> T.Output {
         let builder = NetworkRequestBuilder(template: template)
-        var generatedRequest = try await builder.build(for: self)
+        let request = try await builder.build(for: self)
+        let response = try await execute(request: request)
+        return try decode(response.data, template: type(of: template))
+    }
 
+    func decode<T: NetworkRequestTemplate>(_ data: Data, template: T.Type) throws(JWWNetworkError) -> T.Output {
         do {
-            try await delegate.client(self, willSendRequest: &generatedRequest)
-
-            let (data, response) = try await session.data(for: generatedRequest)
-            guard let httpResponse = response as? HTTPURLResponse else {
-                throw JWWNetworkError.invalidResponse(response)
-            }
-
-            let statusCode = httpResponse.statusCode
-            if statusCode == 401 {
-                let message = HTTPURLResponse.localizedString(forStatusCode: statusCode)
-                throw JWWNetworkError.requestFailed(code: statusCode, message: message)
-            }
-
-            guard HTTPURLResponse.successStatusCodes.contains(statusCode) else {
-                let message = HTTPURLResponse.localizedString(forStatusCode: statusCode)
-                throw JWWNetworkError.requestFailed(code: statusCode, message: message)
-            }
-
-            let decoder = configuration.decoder
-            do {
-                let (object, _) = try type(of: template).decode(response: data, with: decoder)
-                return object
-            } catch {
-                throw JWWNetworkError.decodingError(type(of: template).Output.self, data, error)
-            }
-        } catch let error as JWWNetworkError {
-            throw error
-        } catch let error {
-            throw JWWNetworkError.untypedError(error: error)
+            return try template.decode(response: data, with: configuration.decoder).0
+        } catch {
+            throw .decodingError(T.Output.self, data, error)
         }
     }
+
+    func execute(request: URLRequest, requiresAuthentication: Bool = false,
+                 validateReplay: Bool = false, expiresAt: Date? = nil,
+                 now: @Sendable () -> Date = { Date() }) async throws(JWWNetworkError) -> HTTPResult {
+        let idempotencyKey = request.value(forHTTPHeaderField: "Idempotency-Key")
+        var request = request
+        if requiresAuthentication, request.value(forHTTPHeaderField: "Authorization") == nil,
+           let authentication = configuration.authentication {
+            do {
+                request.setValue("Bearer \(try await authentication.accessToken)", forHTTPHeaderField: "Authorization")
+            } catch {
+                throw .authenticationError(error)
+            }
+        }
+        do {
+            try await delegate.client(self, willSendRequest: &request)
+        } catch {
+            throw error as? JWWNetworkError ?? .untypedError(error: error)
+        }
+        if requiresAuthentication, request.value(forHTTPHeaderField: "Authorization") == nil {
+            throw .authenticationError(URLError(.userAuthenticationRequired))
+        }
+        if validateReplay, request.httpBodyStream != nil || request.value(forHTTPHeaderField: "Idempotency-Key") != idempotencyKey {
+            throw .invalidRequest
+        }
+        if let expiresAt, now() >= expiresAt {
+            throw .untypedError(error: OfflineReplayExpired())
+        }
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await session.data(for: request)
+        } catch {
+            throw .networkError(error)
+        }
+        guard let response = response as? HTTPURLResponse else {
+            throw .invalidResponse(response)
+        }
+        guard HTTPURLResponse.successStatusCodes.contains(response.statusCode) else {
+            throw .requestFailed(code: response.statusCode,
+                                 message: HTTPURLResponse.localizedString(forStatusCode: response.statusCode))
+        }
+        return HTTPResult(data: data, statusCode: response.statusCode)
+    }
+}
+
+struct HTTPResult: Sendable {
+    let data: Data
+    let statusCode: Int
 }
