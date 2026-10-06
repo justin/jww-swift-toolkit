@@ -1,12 +1,14 @@
 import XCTest
 import os
 
-/// A test class for defining test cases, test methods, and performance tests. This subclass includes a `URLSession` instance that includes uses the
+/// A test class for defining test cases, test methods, and performance tests. This subclass includes a `URLSession` instance that uses the
 /// `MockURLProtocol` for injecting custom payload values and bypassing the network.
+@available(*, deprecated, message: "Use withMockNetwork, or own a MockNetwork in your test setup and teardown.")
 open class MockedNetworkTestCase: XCTestCase {
     /// Ephemeral `URLSession` we use for mocking responses.
     public final var session: URLSession!
 
+    /// Creates an ephemeral session using the deprecated protocol and its shared global fixtures.
     open override func setUp() async throws {
         try await super.setUp()
 
@@ -15,6 +17,7 @@ open class MockedNetworkTestCase: XCTestCase {
         session = URLSession(configuration: ephemeral)
     }
 
+    /// Invalidates the test session and removes all global stubs after superclass teardown.
     open override func tearDown() async throws {
         try await super.tearDown()
 

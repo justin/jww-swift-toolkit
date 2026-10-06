@@ -97,6 +97,7 @@ let package = Package(
         .testTarget(
             name: "JWWTestExtensionsTests",
             dependencies: ["JWWTestExtensions"],
+            resources: [.process("Resources")],
             plugins: [
                 .plugin(name: "SwiftLintBuildToolPlugin", package: "SwiftLintPlugins")
             ]
