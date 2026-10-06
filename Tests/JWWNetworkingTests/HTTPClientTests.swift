@@ -8,7 +8,7 @@ final class HTTPClientTests: NetworkTestCase {
     func testSuccessfulRequest() async throws {
         let template = NetworkRequestFake(baseURL: TestingConstants.baseURL, path: "/test", method: .get)
         let fakeResponse = NetworkResponseFake(value: "test-is-valid")
-        try await addStubResponse(forTemplate: template, statusCode: 200, response: fakeResponse)
+        try network.expect(.init(.get, url: URL(string: "https://localhost/test")!), outcome: .response(try .json(fakeResponse)))
 
         let result = try await client.send(template: template)
 
@@ -19,10 +19,41 @@ final class HTTPClientTests: NetworkTestCase {
     func testFailedRequest() async throws {
         let template = NetworkRequestFake(baseURL: TestingConstants.baseURL, path: "/test", method: .get)
         let error = URLError(.badURL)
-        try await addStubResponse(forTemplate: template, error: error)
+        try network.expect(.init(.get, url: URL(string: "https://localhost/test")!), outcome: .failure(error))
 
         await JWWAssertThrowsError(try await client.send(template: template)) { error in
-            XCTAssertTrue(error is JWWNetworkError, "Expected error type returned to be a JWWNetworkError.")
+            guard let error = error as? JWWNetworkError, case .untypedError(let underlying) = error else {
+                return XCTFail("Expected an untyped transport error, received \(error)")
+            }
+            XCTAssertEqual((underlying as? URLError)?.code, .badURL)
+        }
+    }
+
+    func testHTTPErrorRetainsStatus() async throws {
+        let url = URL(string: "https://localhost/rejected")!
+        for status in [401, 429, 500] {
+            try network.expect(.init(.get, url: url), outcome: .response(.text("server rejected request", statusCode: status)))
+            do {
+                _ = try await client.send(template: StaticRequestFake(url: url))
+                XCTFail("Expected HTTP failure")
+            } catch {
+                guard case .requestFailed(let code, _) = error else { return XCTFail("Unexpected error: \(error)") }
+                XCTAssertEqual(code, status)
+            }
+        }
+    }
+
+    func testMalformedJSONRetainsResponseBytes() async throws {
+        let url = URL(string: "https://localhost/malformed")!
+        let response = MockHTTPResponse.text("{ invalid JSON", contentType: "application/json")
+        try network.expect(.init(.get, url: url), outcome: .response(response))
+        do {
+            _ = try await client.send(template: StaticRequestFake(url: url))
+            XCTFail("Expected decoding failure")
+        } catch {
+            guard case .decodingError(_, let data, let underlying) = error else { return XCTFail("Unexpected error: \(error)") }
+            XCTAssertEqual(data, response.data)
+            XCTAssertTrue(underlying is DecodingError)
         }
     }
     /// Transport classification must reflect the URLSession error, not an untyped wrapper.

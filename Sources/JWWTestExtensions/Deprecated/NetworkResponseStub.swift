@@ -2,6 +2,7 @@ import Foundation
 
 /// Custom type that allows us to set values we want to return in a `Foundation.URLResponse` or
 /// `Foundation.HTTPURLResponse`.
+@available(*, deprecated, message: "Use MockHTTPResponse and MockOutcome with MockNetwork.expect instead.")
 public struct NetworkResponseStub: Equatable, Sendable {
   /// The URL for the response.
   public let url: URL
@@ -43,12 +44,18 @@ public struct NetworkResponseStub: Equatable, Sendable {
     self.error = error
   }
 
+  /// Compares only URL and status code, preserving compatibility with global-stub removal.
+  /// Response bodies and errors do not participate in equality.
   public static func == (lhs: NetworkResponseStub, rhs: NetworkResponseStub) -> Bool {
     return lhs.url == rhs.url && lhs.statusCode == rhs.statusCode
   }
 }
 
+/// Compatibility lookup that preserves reusable global fixtures and path/query-only matching.
+@available(*, deprecated, message: "Use MockRequestMatcher with MockNetwork.expect instead.")
 extension Collection where Element == NetworkResponseStub {
+  /// Returns the last stub whose path components and ordered query items match the request.
+  /// Scheme, host, port, method, and body are ignored. Missing or unparseable URLs do not match.
   func find(for request: URLRequest) -> NetworkResponseStub? {
     guard let url = request.url,
       let requestComponents = URLComponents(url: url, resolvingAgainstBaseURL: false)
