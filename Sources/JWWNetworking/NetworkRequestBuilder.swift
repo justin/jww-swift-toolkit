@@ -27,11 +27,15 @@ public final class NetworkRequestBuilder {
     ///
     /// - Returns: A valid `URLRequest` that can be passed into a `URLSession`.
     public func build(for client: HTTPClient) async throws(JWWNetworkError) -> URLRequest {
+        try await build(for: client, includeAuthentication: true)
+    }
+
+    func build(for client: HTTPClient, includeAuthentication: Bool) async throws(JWWNetworkError) -> URLRequest {
         switch template {
         case let generatedTemplate as any GeneratedNetworkRequest:
-            return try await buildGeneratedRequest(template: generatedTemplate, client: client)
+            return try await buildGeneratedRequest(template: generatedTemplate, client: client, includeAuthentication: includeAuthentication)
         case let staticURLTemplate as any StaticNetworkRequest:
-            return try await buildURLRequest(template: staticURLTemplate, client: client)
+            return try await buildURLRequest(template: staticURLTemplate, client: client, includeAuthentication: includeAuthentication)
         default:
             throw JWWNetworkError.invalidRequest
         }
@@ -42,7 +46,8 @@ public final class NetworkRequestBuilder {
     // Private / Convenience
     // ====================================
 
-    private func buildGeneratedRequest(template: any GeneratedNetworkRequest, client: HTTPClient) async throws(JWWNetworkError) -> URLRequest {
+    private func buildGeneratedRequest(template: any GeneratedNetworkRequest, client: HTTPClient,
+                                       includeAuthentication: Bool) async throws(JWWNetworkError) -> URLRequest {
         let url = template.baseURL ?? client.configuration.baseURL
 
         guard let url else {
@@ -61,20 +66,20 @@ public final class NetworkRequestBuilder {
 
         var request = URLRequest(url: url)
         request.httpMethod = String(describing: template.method)
-        request.allHTTPHeaderFields = try await buildRequestHeaders(client: client)
+        request.allHTTPHeaderFields = try await buildRequestHeaders(client: client, includeAuthentication: includeAuthentication)
         request.httpBody = template.body
 
         return request
     }
 
-    private func buildRequestHeaders(client: HTTPClient) async throws(JWWNetworkError) -> [String: String] {
+    private func buildRequestHeaders(client: HTTPClient, includeAuthentication: Bool) async throws(JWWNetworkError) -> [String: String] {
         var serviceHeaders: [String: String] = [:]
 
         if let userAgent = client.configuration.userAgent {
             serviceHeaders[HTTPRequestHeaderKey.userAgent.value] = userAgent
         }
 
-        if let authenticationController = client.configuration.authentication, template is (any AuthenticatedRequest) {
+        if includeAuthentication, let authenticationController = client.configuration.authentication, template is (any AuthenticatedRequest) {
             do {
                 let token = try await authenticationController.accessToken
                 serviceHeaders[HTTPRequestHeaderKey.authorization.value] = "Bearer \(token)"
@@ -93,7 +98,8 @@ public final class NetworkRequestBuilder {
         return requestHeaders
     }
 
-    private func buildURLRequest(template: any StaticNetworkRequest, client: HTTPClient) async throws(JWWNetworkError) -> URLRequest {
+    private func buildURLRequest(template: any StaticNetworkRequest, client: HTTPClient,
+                                 includeAuthentication: Bool) async throws(JWWNetworkError) -> URLRequest {
         let url = template.url
 
         let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
@@ -103,7 +109,7 @@ public final class NetworkRequestBuilder {
 
         var request = URLRequest(url: url)
         request.httpMethod = String(describing: template.method)
-        request.allHTTPHeaderFields = try await buildRequestHeaders(client: client)
+        request.allHTTPHeaderFields = try await buildRequestHeaders(client: client, includeAuthentication: includeAuthentication)
         request.httpBody = template.body
 
         return request

@@ -69,8 +69,9 @@ public enum JWWNetworkError: Error, CustomNSError, CustomStringConvertible {
     /// Boolean that returns true if the error returned is because the request was cancelled.
     var isCancellation: Bool {
         switch self {
-        case .networkError(let error as URLError) where error.code == .cancelled:
-            return true
+        case .authenticationError(let error), .untypedError(let error), .networkError(let error):
+            return error is CancellationError || (error as? URLError)?.code == .cancelled ||
+                (error as? JWWNetworkError)?.isCancellation == true
         default:
             return false
         }
@@ -79,6 +80,7 @@ public enum JWWNetworkError: Error, CustomNSError, CustomStringConvertible {
     /// Boolean that returns true if the error returned is capable of being retried.
     var isRetriableError: Bool {
         let retriableErrors: [URLError.Code] = [
+            .notConnectedToInternet,
             .cannotFindHost,
             .cannotConnectToHost,
             .dnsLookupFailed,
