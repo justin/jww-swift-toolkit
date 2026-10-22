@@ -1,0 +1,106 @@
+#!/bin/bash
+# Generate the macOS API reference and publish it for the Ubuntu Pages workflow.
+set -euo pipefail
+
+dry_run=false
+case "${1:-}" in
+    "") ;;
+    --dry-run) dry_run=true ;;
+    *) echo "Usage: $0 [--dry-run]" >&2; exit 1 ;;
+esac
+if [[ $# -gt 1 ]]; then
+    echo "Usage: $0 [--dry-run]" >&2
+    exit 1
+fi
+
+if [[ "$(uname -s)" != Darwin ]]; then
+    echo "Documentation generation requires macOS and an Xcode Swift toolchain." >&2
+    exit 1
+fi
+
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+repo_dir=$(git -C "$script_dir" rev-parse --show-toplevel)
+cd "$repo_dir"
+
+if [[ "$(git branch --show-current)" != main ]]; then
+    echo "Switch to main before publishing documentation." >&2
+    exit 1
+fi
+if [[ -n "$(git status --porcelain)" ]]; then
+    echo "Documentation publishing requires a clean working tree, including untracked files." >&2
+    exit 1
+fi
+git fetch --quiet origin main
+source_revision=$(git rev-parse HEAD)
+if [[ "$source_revision" != "$(git rev-parse FETCH_HEAD)" ]]; then
+    echo "Local main differs from origin/main. Update main before publishing documentation." >&2
+    exit 1
+fi
+
+temp_dir=$(mktemp -d "${TMPDIR:-/tmp}/jww-documentation.XXXXXX")
+trap 'rm -rf "$temp_dir"' EXIT
+site_dir="$temp_dir/site"
+publish_dir="$temp_dir/publish"
+
+swift package --force-resolved-versions --allow-writing-to-directory "$site_dir" \
+    generate-documentation \
+    --target JWWCore \
+    --target JWWCoreData \
+    --target JWWCoreDataTestSupport \
+    --target JWWNetworking \
+    --target JWWTestExtensions \
+    --target JWWAppKit \
+    --target JWWUIKit \
+    --enable-experimental-combined-documentation \
+    --disable-indexing \
+    --transform-for-static-hosting \
+    --output-path "$site_dir" \
+    --hosting-base-path jww-swift-toolkit \
+    --source-service github \
+    --source-service-base-url "https://github.com/justin/jww-swift-toolkit/blob/$source_revision" \
+    --checkout-path "$repo_dir"
+
+if [[ ! -f "$site_dir/documentation/index.html" ]]; then
+    echo "DocC did not generate the combined documentation entry point." >&2
+    exit 1
+fi
+if [[ "$(git rev-parse HEAD)" != "$source_revision" || -n "$(git status --porcelain)" ]]; then
+    echo "The source checkout changed during documentation generation; nothing was published." >&2
+    exit 1
+fi
+cp Documentation/index.html "$site_dir/index.html"
+# Push-triggered workflows must also exist on the branch receiving the push.
+mkdir -p "$site_dir/.github/workflows"
+cp .github/workflows/documentation.yml "$site_dir/.github/workflows/documentation.yml"
+
+if $dry_run; then
+    echo "Documentation generated successfully for $source_revision; dry run did not publish."
+    exit 0
+fi
+
+# Use a separate repository so publishing never switches or edits the source checkout.
+git init --quiet --initial-branch=gh-pages "$publish_dir"
+git -C "$publish_dir" remote add origin "$(git remote get-url --push origin)"
+if git -C "$publish_dir" ls-remote --exit-code origin refs/heads/gh-pages > "$temp_dir/remote-ref"; then
+    git -C "$publish_dir" fetch --quiet origin gh-pages
+    git -C "$publish_dir" reset --quiet --hard FETCH_HEAD
+    git -C "$publish_dir" rm --quiet -r --ignore-unmatch .
+else
+    remote_status=$?
+    if [[ $remote_status -ne 2 ]]; then
+        echo "Could not check the remote gh-pages branch; nothing was published." >&2
+        exit "$remote_status"
+    fi
+fi
+
+cp -R "$site_dir/." "$publish_dir/"
+git -C "$publish_dir" add --all
+if git -C "$publish_dir" diff --cached --quiet; then
+    echo "Published documentation is already up to date."
+    exit 0
+fi
+git -C "$publish_dir" -c user.name="$(git config user.name)" -c user.email="$(git config user.email)" \
+    commit --quiet -m "Publish documentation for $source_revision"
+# A normal push preserves branch history and rejects concurrent publications.
+git -C "$publish_dir" push origin HEAD:refs/heads/gh-pages
+echo "Published documentation for $source_revision; GitHub Actions will deploy it to Pages."
