@@ -23,12 +23,34 @@ networking, UIKit, AppKit, and test-support tasks. It supports iOS 18.4+, macOS
   conveniences, and network test doubles.
 - `JWWUIKit`: UIKit conveniences for view controllers, controls, collection
   views, table views, and reusable views.
-- `JWWAppKit`: AppKit conveniences for views, collection views, storyboards,
+- `JWWAppKit`: AppKit conveniences for child-controller containment, typed
+  collection and table view reuse, text-field publishing, views, storyboards,
   and XIB-backed types.
 
 `JWWSwiftToolkit` is an umbrella product for the production modules. Individual
 products are available when an application needs a narrower dependency; test
 support remains an explicit test-target dependency.
+
+## AppKit Helpers
+
+`NSViewController.add(_:)` and `add(_:superview:)` attach both the child
+controller and its view. Call `remove()` on the child to detach both. These
+helpers leave frames, autoresizing masks, and constraints to the caller.
+
+Conform collection view items or table views' reusable views to
+`JWWAppKit.ReuseIdentifiable`, providing a static `reuseIdentifier` of type
+`NSUserInterfaceItemIdentifier`. Collection views provide
+`registerReusableClass(_:)` and `makeReusableItem(_:for:)`. Table views provide
+`makeReusableView(_:owner:)`, which preserves AppKit's optional result and
+passes the owner through to nib loading. An identifier that produces the wrong
+type is a programming error. For nib-backed types, conform to
+`JWWAppKit.ReuseIdentifiableNib`, provide a static `NSNib`, and use
+`registerReusableNib(_:)` on either collection or table views.
+
+`NSTextField.textPublisher` emits strings for editing-change notifications
+from that field. It does not emit an initial value or observe programmatic
+`stringValue` assignments. Subscribe and edit on the main actor; keeping the
+publisher or subscription alive does not retain the field.
 
 ## Core Data Test Support
 
