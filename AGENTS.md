@@ -59,4 +59,5 @@ sessions or is intentionally paused.
 Use short, imperative, capitalized commit subjects, e.g. `Add JWW Swift
 Toolkit`. Keep commits focused. PRs should explain behavior, link relevant
 issues, list validation, and include screenshots only for visible UI changes.
-Ensure linting and the CI platform matrix pass before review.
+Ensure linting and the local platform matrix pass before review. GitHub Actions
+runs linting on Ubuntu; Apple-platform tests must run locally.

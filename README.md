@@ -93,6 +93,31 @@ running the test suite across the supported Apple platforms.
 The generated API reference is published at
 [justin.github.io/jww-swift-toolkit/documentation](https://justin.github.io/jww-swift-toolkit/documentation/).
 
+Generate and publish documentation from a clean checkout of current `main`
+on your Mac using the Xcode Swift toolchain:
+
+```sh
+./scripts/publish-documentation --dry-run # Generate and validate without publishing
+./scripts/publish-documentation           # Generate and push the site to gh-pages
+```
+
+The script fetches `origin/main` and requires your checkout to match it. It
+generates the reference in a temporary directory and publishes it to the
+dedicated `gh-pages` branch without switching or modifying your working
+branch. Publication uses your Git credentials and commit identity, preserves
+the site's branch history, and rejects concurrent updates rather than
+force-pushing. Temporary files are removed when the script exits.
+
+The Ubuntu documentation workflow deploys the generated files to GitHub
+Pages when `gh-pages` changes. Configure the repository's Pages source as
+**GitHub Actions** and allow the `gh-pages` branch to deploy to the
+`github-pages` environment. The workflow can also be run manually to redeploy
+the existing site. The script copies this workflow into `gh-pages` so pushes
+to that branch can trigger it.
+
+Documentation generation and Apple-platform tests run locally. GitHub
+Actions uses only Ubuntu runners for Pages deployment, linting, and releases.
+
 ## License
 
 JWW Swift Toolkit is available under the [MIT License](LICENSE.md).
