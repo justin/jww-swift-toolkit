@@ -22,8 +22,8 @@ final class HTTPClientTests: NetworkTestCase {
         try network.expect(.init(.get, url: URL(string: "https://localhost/test")!), outcome: .failure(error))
 
         await JWWAssertThrowsError(try await client.send(template: template)) { error in
-            guard let error = error as? JWWNetworkError, case .untypedError(let underlying) = error else {
-                return XCTFail("Expected an untyped transport error, received \(error)")
+            guard let error = error as? JWWNetworkError, case .networkError(let underlying) = error else {
+                return XCTFail("Expected a transport error, received \(error)")
             }
             XCTAssertEqual((underlying as? URLError)?.code, .badURL)
         }
@@ -59,7 +59,7 @@ final class HTTPClientTests: NetworkTestCase {
     /// Transport classification must reflect the URLSession error, not an untyped wrapper.
     func testConnectivityErrorClassification() async throws {
         let template = NetworkRequestFake(baseURL: TestingConstants.baseURL, path: "/offline", method: .get)
-        try await addStubResponse(forTemplate: template, error: URLError(.notConnectedToInternet))
+        try network.expect(.init(.get, url: URL(string: "https://localhost/offline")!), outcome: .failure(URLError(.notConnectedToInternet)))
         do {
             _ = try await client.send(template: template)
             XCTFail("Expected a connectivity error")
@@ -74,7 +74,7 @@ final class HTTPClientTests: NetworkTestCase {
         let fixture = try OfflineQueueFixture()
         defer { try? fixture.remove() }
         let template = NetworkRequestFake(baseURL: TestingConstants.baseURL, path: "/once", method: .get)
-        try await addStubResponse(forTemplate: template, error: URLError(.notConnectedToInternet))
+        try network.expect(.init(.get, url: URL(string: "https://localhost/once")!), outcome: .failure(URLError(.notConnectedToInternet)))
         let queue = try OfflineRequestQueue(client: client, configuration: fixture.configuration)
         do {
             _ = try await queue.send(template: template, policy: RetryPolicy(schedule: .none), operation: "test", replaySafety: .idempotent)
@@ -100,7 +100,7 @@ final class HTTPClientTests: NetworkTestCase {
                                       validateReplay: true, expiresAt: expiresAt, now: { fixture.clock.now() })
         })
         let template = OfflineAuthenticatedRequest(url: fixture.snapshot.url)
-        try await addStubResponse(forTemplate: template, error: URLError(.notConnectedToInternet))
+        try network.expect(.init(.post, url: template.url), outcome: .failure(URLError(.notConnectedToInternet)))
         try await queue.start()
         let result = try await queue.send(template: template, policy: RetryPolicy(schedule: .fixed(10)), operation: "auth",
                                            replaySafety: .idempotencyKey("stable-key"))
@@ -109,7 +109,7 @@ final class HTTPClientTests: NetworkTestCase {
         let pending = try await fixture.store.pendingRequests(configuration: fixture.configuration, now: fixture.clock.now())
         XCTAssertNil(pending.first?.snapshot.headers["Authorization"])
         await authentication.replaceToken()
-        try await addStubResponse(forTemplate: template, statusCode: 200, response: NetworkResponseFake(value: "success"))
+        try network.expect(.init(.post, url: template.url), outcome: .response(try .json(NetworkResponseFake(value: "success"))))
         let events = await queue.events()
         fixture.clock.advance(10)
         try await queue.start()
@@ -125,7 +125,8 @@ final class HTTPClientTests: NetworkTestCase {
         let fixture = try OfflineQueueFixture()
         defer { try? fixture.remove() }
         let template: BaseDecodingRequest = SubclassDecodingRequest(url: fixture.snapshot.url)
-        try await addStubResponse(forTemplate: template, statusCode: 200, response: NetworkResponseFake(value: "wire"))
+        // Sent once immediately and once through the queue.
+        try network.expect(.init(.get, url: template.url), outcome: .response(try .json(NetworkResponseFake(value: "wire"))), count: 2)
         let immediate = try await client.send(template: template)
         XCTAssertEqual(immediate.value, "subclass")
         let queue = try OfflineRequestQueue(client: client, configuration: fixture.configuration)
@@ -177,7 +178,8 @@ final class HTTPClientTests: NetworkTestCase {
             let delegate = OfflineRecordingDelegate()
             let client = HTTPClient(configuration: .init(baseURL: nil, authentication: authentication), session: session, delegate: delegate)
             let template = OfflineAuthenticatedRequest(url: fixture.snapshot.url, headers: [.authorization: "Bearer explicit"])
-            try await addStubResponse(forTemplate: template, statusCode: 200, response: NetworkResponseFake(value: "success"))
+            // Sent once immediately and once through the queue.
+            try network.expect(.init(.post, url: template.url), outcome: .response(try .json(NetworkResponseFake(value: "success"))), count: 2)
             let ordinary = try await client.send(template: template)
             let queue = try OfflineRequestQueue(client: client, configuration: fixture.configuration)
             try await queue.start()
@@ -213,7 +215,7 @@ final class HTTPClientTests: NetworkTestCase {
                                       validateReplay: true, expiresAt: expiresAt, now: { fixture.clock.now() })
         })
         let template = OfflineAuthenticatedRequest(url: fixture.snapshot.url)
-        try await addStubResponse(forTemplate: template, error: URLError(.notConnectedToInternet))
+        try network.expect(.init(.post, url: template.url), outcome: .failure(URLError(.notConnectedToInternet)))
         try await queue.start()
         let submission = try await queue.send(template: template, policy: RetryPolicy(schedule: .fixed(10)),
                                                operation: "test", replaySafety: .idempotent)
@@ -222,7 +224,7 @@ final class HTTPClientTests: NetworkTestCase {
         let pending = try await fixture.store.pendingRequests(configuration: fixture.configuration, now: fixture.clock.now())
         XCTAssertNil(pending.first?.snapshot.headers["Authorization"])
         delegate.replaceAuthorization("Bearer second")
-        try await addStubResponse(forTemplate: template, statusCode: 200, response: NetworkResponseFake(value: "success"))
+        try network.expect(.init(.post, url: template.url), outcome: .response(try .json(NetworkResponseFake(value: "success"))))
         let events = await queue.events()
         fixture.clock.advance(10)
         try await queue.start()
@@ -252,9 +254,7 @@ final class HTTPClientTests: NetworkTestCase {
                 try await client.execute(request: request, requiresAuthentication: requiresAuthentication,
                                           validateReplay: true, expiresAt: expiresAt, now: { fixture.clock.now() })
             })
-            // A successful stub makes any accidental transmission observable as a success receipt.
-            addStubResponse(forURL: fixture.snapshot.url, statusCode: 200,
-                             responseData: try JSONEncoder().encode(NetworkResponseFake(value: "must not send")))
+            // No expectation is registered, so any accidental transmission fails verification in tearDown.
             let events = await queue.events()
             try await queue.start()
             _ = try await nextDelay(in: gate.entered)
