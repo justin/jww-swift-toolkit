@@ -158,17 +158,17 @@ public actor OfflineRequestQueue {
         let response: HTTPResult
         do {
             try Task.checkCancellation()
-            response = try await transport(request, template is any AuthenticatedRequest, nil)
+            response = try await transport(request, template is any AuthenticatedRequest, nil).checked()
         } catch {
             try Task.checkCancellation()
             guard running else { throw OfflineQueueError.stopped }
-            guard isRetryableFailure(error) else { throw error }
+            guard isRetryableFailure(error) else { throw (error as? HTTPRetryFailure)?.networkError ?? error }
             guard now() < createdAt.addingTimeInterval(policy.maximumAge) else { throw error }
             let snapshot = try makeSnapshot(request: request, requiresAuthentication: template is any AuthenticatedRequest)
             let id = UUID()
             try await store.sweep(configuration: configuration, now: now())
             try await store.insert(id: id, operation: operation, snapshot: snapshot, policy: policy,
-                                   timing: (createdAt, nextDate(policy: policy, retry: 1)), configuration: configuration)
+                                   timing: (createdAt, nextDate(policy: policy, retry: 1, after: error)), configuration: configuration)
             wake()
             return .queued(id)
         }
@@ -303,7 +303,7 @@ public actor OfflineRequestQueue {
         let transport = transport
         let task = Task {
             try Task.checkCancellation()
-            return try await transport(request.snapshot.request, request.snapshot.requiresAuthentication, request.expiresAt)
+            return try await transport(request.snapshot.request, request.snapshot.requiresAuthentication, request.expiresAt).checked()
         }
         currentAttempt = task
         let result: Result<HTTPResult, any Error> = await task.result
@@ -313,7 +313,8 @@ public actor OfflineRequestQueue {
         case .failure(let error):
             let cancelled = error is CancellationError || (error as? JWWNetworkError)?.isCancellation == true
             if !running || Task.isCancelled, isRetryableFailure(error) || cancelled {
-                try await store.reschedule(request.id, nextAttemptAt: recoveryDate, accountID: configuration.accountID)
+                try await store.reschedule(request.id,
+                    nextAttemptAt: max(recoveryDate, (error as? HTTPRetryFailure)?.retryAfter ?? .distantPast), accountID: configuration.accountID)
                 return
             }
             if isRetryableFailure(error) {
@@ -322,9 +323,8 @@ public actor OfflineRequestQueue {
                 } else if now() >= request.expiresAt {
                     try await complete(request.id, outcome: .failure(.expired))
                 } else {
-                    try await store.reschedule(request.id,
-                                               nextAttemptAt: now().addingTimeInterval(retryDelay),
-                                               accountID: configuration.accountID)
+                    let deadline = max(now().addingTimeInterval(retryDelay), (error as? HTTPRetryFailure)?.retryAfter ?? .distantPast)
+                    try await store.reschedule(request.id, nextAttemptAt: deadline, accountID: configuration.accountID)
                 }
             } else {
                 try await complete(request.id, outcome: .failure(terminalFailure(error)))
@@ -332,8 +332,9 @@ public actor OfflineRequestQueue {
         }
     }
 
-    private func nextDate(policy: RetryPolicy, retry: Int) -> Date {
-        now().addingTimeInterval(policy.delay(retry: retry, random: random()))
+    private func nextDate(policy: RetryPolicy, retry: Int, after error: any Error) -> Date {
+        max(now().addingTimeInterval(policy.delay(retry: retry, random: random())),
+            (error as? HTTPRetryFailure)?.retryAfter ?? .distantPast)
     }
 
     private func complete(_ id: UUID, outcome: OfflineRequestCompletion.Outcome) async throws {
@@ -381,12 +382,14 @@ public actor OfflineRequestQueue {
     }
 
     private func isRetryableFailure(_ error: any Error) -> Bool {
+        if let error = error as? HTTPRetryFailure { return configuration.retryableHTTPStatusCodes.contains(error.statusCode) }
         guard let error = error as? JWWNetworkError else { return false }
         if case .requestFailed(let code, _) = error { return configuration.retryableHTTPStatusCodes.contains(code) }
         return error.isRetriableError
     }
 
     private func terminalFailure(_ error: any Error) -> OfflineRequestCompletion.Failure {
+        if let error = error as? HTTPRetryFailure { return .httpStatus(error.statusCode) }
         if error is CancellationError || (error as? JWWNetworkError)?.isCancellation == true { return .cancelled }
         guard let error = error as? JWWNetworkError else { return .invalidRequestOrResponse }
         switch error {

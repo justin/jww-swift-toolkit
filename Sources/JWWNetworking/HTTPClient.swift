@@ -126,15 +126,24 @@ public actor HTTPClient {
         guard let response = response as? HTTPURLResponse else {
             throw .invalidResponse(response)
         }
-        guard HTTPURLResponse.successStatusCodes.contains(response.statusCode) else {
+        guard validateReplay || HTTPURLResponse.successStatusCodes.contains(response.statusCode) else {
             throw .requestFailed(code: response.statusCode,
                                  message: HTTPURLResponse.localizedString(forStatusCode: response.statusCode))
         }
-        return HTTPResult(data: data, statusCode: response.statusCode)
+        return HTTPResult(data: data, statusCode: response.statusCode,
+                          retryAfter: RetryAfter.date(response.value(forHTTPHeaderField: "Retry-After"), now: now()))
     }
 }
 
 struct HTTPResult: Sendable {
     let data: Data
     let statusCode: Int
+    var retryAfter: Date?
+
+    func checked() throws -> HTTPResult {
+        guard HTTPURLResponse.successStatusCodes.contains(statusCode) else {
+            throw HTTPRetryFailure(statusCode: statusCode, retryAfter: retryAfter)
+        }
+        return self
+    }
 }

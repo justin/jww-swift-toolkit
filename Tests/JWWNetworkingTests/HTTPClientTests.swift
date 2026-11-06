@@ -29,6 +29,15 @@ final class HTTPClientTests: NetworkTestCase {
         }
     }
 
+    func testReplayTransportRetainsRetryAfterWithoutChangingOrdinaryHTTPErrors() async throws {
+        let url = URL(string: "https://localhost/busy")!
+        try network.expect(.init(.get, url: url), outcome: .response(.init(statusCode: 503, headers: ["Retry-After": "120"])))
+        let now = Date(timeIntervalSince1970: 1_000)
+        let result = try await client.execute(request: URLRequest(url: url), validateReplay: true, now: { now })
+        XCTAssertEqual(result.statusCode, 503)
+        XCTAssertEqual(result.retryAfter, now.addingTimeInterval(120))
+    }
+
     func testHTTPErrorRetainsStatus() async throws {
         let url = URL(string: "https://localhost/rejected")!
         for status in [401, 429, 500] {
