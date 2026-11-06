@@ -89,8 +89,15 @@ The queue saves the chosen next-attempt date, so relaunch does not reset the sch
 The reserved recovery date for an interrupted attempt is retained if it is still in the future.
 
 The worker retries offline, connection-lost, timeout, host-connection, and DNS errors. Cancellation,
-certificate failures, authentication failures, and all non-success HTTP statuses are terminal.
-This includes 429 and 5xx; HTTP throttling and `Retry-After` are not part of this policy.
+certificate failures, authentication failures, and HTTP statuses are terminal by default.
+Set `OfflineQueueConfiguration.retryableHTTPStatusCodes` to `[503]` to retry service-unavailable
+responses using the same persisted schedule and budget as connectivity failures. The configuration
+is supplied again when reopening the queue. HTTP throttling and `Retry-After` are not part of this policy.
+
+Use `pendingStatuses()` to display persisted next-attempt dates and active delivery state.
+`retryNow(id)` brings a waiting request forward without resetting its attempt budget or expiration.
+It does not interrupt an active attempt or revive a terminal receipt. The queue must be running
+for delivery to begin; suspension can delay a scheduled retry.
 
 Expiration bounds pending lifetime. Replay checks the deadline again after authentication and delegate
 preparation, immediately before transmission. A single worker processes eligible operations without allowing a

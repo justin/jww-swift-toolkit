@@ -19,17 +19,21 @@ public struct OfflineQueueConfiguration: Sendable {
     /// Header names permitted in persisted snapshots, compared case-insensitively.
     public let allowedHeaderNames: Set<String>
 
+    /// HTTP status codes eligible for automatic retry in addition to connectivity failures.
+    public let retryableHTTPStatusCodes: Set<Int>
+
     /// Creates validated storage settings. Credential headers may never be persisted.
     /// The parent directory must already exist and be writable.
     public init(storeURL: URL, accountID: String, maximumRecords: Int = 1_000,
                 maximumPayloadBytes: Int = 1_048_576, maximumStoredBytes: Int = 20_971_520,
-                receiptRetention: TimeInterval = 604_800,
+                receiptRetention: TimeInterval = 604_800, retryableHTTPStatusCodes: Set<Int> = [],
                 allowedHeaderNames: Set<String> = ["content-type", "accept", "accept-language", "user-agent", "idempotency-key"]) throws {
         guard storeURL.isFileURL, !accountID.isEmpty, accountID.utf8.count <= 256, maximumRecords > 0,
               maximumPayloadBytes > 0, maximumStoredBytes >= max(Self.minimumRecordBytes, maximumPayloadBytes),
               receiptRetention.isFinite, receiptRetention > 0 else {
             throw OfflineQueueError.invalidConfiguration
         }
+        self.retryableHTTPStatusCodes = retryableHTTPStatusCodes
         self.storeURL = storeURL
         self.accountID = accountID
         self.maximumRecords = maximumRecords

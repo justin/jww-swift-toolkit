@@ -100,6 +100,11 @@ actor OfflineQueueStore: ModelActor {
         return true
     }
 
+    func retryNow(_ id: UUID, now: Date, accountID: String) throws {
+        guard let record = try record(id, accountID: accountID), record.state == "waiting" else { return }
+        try save { record.nextAttemptAt = now }
+    }
+
     func reschedule(_ id: UUID, nextAttemptAt: Date, accountID: String) throws {
         guard let record = try record(id, accountID: accountID), record.state == "sending" else { return }
         try save {

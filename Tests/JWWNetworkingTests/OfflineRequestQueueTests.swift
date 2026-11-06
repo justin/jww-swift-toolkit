@@ -4,6 +4,32 @@ import Testing
 
 struct OfflineRequestQueueTests {
     @Test
+    func testConfiguredHTTPFailureSchedulesRetryAndManualRetryPreservesBudget() async throws {
+        let fixture = try OfflineQueueFixture(retryableHTTPStatusCodes: [503])
+        defer { try? fixture.remove() }
+        let failure = JWWNetworkError.requestFailed(code: 503, message: "Unavailable")
+        let transport = OfflineTestTransport([.failure(failure), .failure(failure)])
+        let queue = fixture.queue(transport: transport)
+        try await queue.start()
+        let submission = try await queue.send(template: fixture.template,
+            policy: RetryPolicy(maximumRetries: 1, schedule: .fixed(10)), operation: "update", replaySafety: .idempotencyKey("stable"))
+        guard case .queued(let id) = submission else { Issue.record("Expected queued 503"); return }
+        let status = try #require(await queue.pendingStatuses().first)
+        #expect(status.id == id)
+        #expect(status.nextAttemptAt == fixture.clock.now().addingTimeInterval(10))
+        #expect(!status.isSending)
+        let events = await queue.events()
+        try await queue.retryNow(id)
+        #expect(try await nextCompletion(in: events) == id)
+        let receipt = try #require(await queue.unacknowledgedCompletions().first)
+        guard case .failure(.retriesExhausted) = receipt.outcome else { Issue.record("Expected exhaustion"); return }
+        #expect(await transport.requests.count == 2)
+        #expect(await transport.requests.allSatisfy { $0.headers["Idempotency-Key"] == "stable" })
+        #expect(try await queue.pendingStatuses().isEmpty)
+        await queue.stop()
+    }
+
+    @Test
     func testOfflineThenSuccessPreservesIdentityAndCleansUp() async throws {
         let fixture = try OfflineQueueFixture()
         defer { try? fixture.remove() }

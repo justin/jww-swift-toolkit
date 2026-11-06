@@ -33,12 +33,13 @@ struct OfflineQueueFixture {
     let client = HTTPClient(configuration: .init(baseURL: nil))
 
     init(maximumRecords: Int = 1_000, maximumPayloadBytes: Int = 1_048_576,
-         maximumStoredBytes: Int = 20_971_520, receiptRetention: TimeInterval = 100) throws {
+         maximumStoredBytes: Int = 20_971_520, receiptRetention: TimeInterval = 100, retryableHTTPStatusCodes: Set<Int> = []) throws {
         directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         configuration = try OfflineQueueConfiguration(storeURL: directory.appendingPathComponent("queue.store"), accountID: "account-a",
                                                        maximumRecords: maximumRecords, maximumPayloadBytes: maximumPayloadBytes,
-                                                       maximumStoredBytes: maximumStoredBytes, receiptRetention: receiptRetention)
+                                                       maximumStoredBytes: maximumStoredBytes, receiptRetention: receiptRetention,
+                                                       retryableHTTPStatusCodes: retryableHTTPStatusCodes)
         store = try OfflineQueueStore.open(configuration: configuration)
     }
 

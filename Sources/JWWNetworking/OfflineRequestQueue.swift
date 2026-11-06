@@ -142,7 +142,7 @@ public actor OfflineRequestQueue {
         stopping = nil
     }
 
-    /// Attempts delivery immediately, persisting only eligible connectivity failures.
+    /// Attempts delivery immediately, persisting eligible connectivity and configured HTTP failures.
     ///
     /// The supplied replay guarantee applies to the server operation, including any delegate modifications.
     /// `.none` and zero retries use the ordinary client without creating a queue record.
@@ -162,7 +162,7 @@ public actor OfflineRequestQueue {
         } catch {
             try Task.checkCancellation()
             guard running else { throw OfflineQueueError.stopped }
-            guard isConnectivityFailure(error) else { throw error }
+            guard isRetryableFailure(error) else { throw error }
             guard now() < createdAt.addingTimeInterval(policy.maximumAge) else { throw error }
             let snapshot = try makeSnapshot(request: request, requiresAuthentication: template is any AuthenticatedRequest)
             let id = UUID()
@@ -173,6 +173,19 @@ public actor OfflineRequestQueue {
             return .queued(id)
         }
         return .completed(try await client.decode(response.data, template: type(of: template)))
+    }
+
+    /// Returns persisted retry timing without exposing request bodies or credentials.
+    public func pendingStatuses() async throws -> [OfflineRequestStatus] {
+        try await store.pendingRequests(configuration: configuration, now: now()).map {
+            OfflineRequestStatus(id: $0.id, nextAttemptAt: $0.nextAttemptAt, isSending: $0.id == currentID)
+        }
+    }
+
+    /// Makes a waiting request eligible now without resetting its retry budget or interrupting an active attempt.
+    public func retryNow(_ id: UUID) async throws {
+        try await store.retryNow(id, now: now(), accountID: configuration.accountID)
+        wake()
     }
 
     /// Returns durable receipts for this account. Reading does not acknowledge them.
@@ -299,11 +312,11 @@ public actor OfflineRequestQueue {
             try await complete(request.id, outcome: .success(statusCode: response.statusCode, data: response.data))
         case .failure(let error):
             let cancelled = error is CancellationError || (error as? JWWNetworkError)?.isCancellation == true
-            if !running || Task.isCancelled, isConnectivityFailure(error) || cancelled {
+            if !running || Task.isCancelled, isRetryableFailure(error) || cancelled {
                 try await store.reschedule(request.id, nextAttemptAt: recoveryDate, accountID: configuration.accountID)
                 return
             }
-            if isConnectivityFailure(error) {
+            if isRetryableFailure(error) {
                 if request.attemptsStarted >= request.policy.maximumRetries {
                     try await complete(request.id, outcome: .failure(.retriesExhausted))
                 } else if now() >= request.expiresAt {
@@ -367,8 +380,9 @@ public actor OfflineRequestQueue {
         return snapshot
     }
 
-    private func isConnectivityFailure(_ error: any Error) -> Bool {
+    private func isRetryableFailure(_ error: any Error) -> Bool {
         guard let error = error as? JWWNetworkError else { return false }
+        if case .requestFailed(let code, _) = error { return configuration.retryableHTTPStatusCodes.contains(code) }
         return error.isRetriableError
     }
 
