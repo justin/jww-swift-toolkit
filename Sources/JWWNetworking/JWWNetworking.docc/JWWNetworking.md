@@ -12,6 +12,12 @@ Build typed HTTP requests and optionally recover replay-safe operations after co
 - ``StaticNetworkRequest``
 - ``JWWNetworkError``
 
+### File transfers
+
+- <doc:FileTransfers>
+- ``HTTPTransferSession``
+- ``HTTPTransferProgress``
+
 ### Offline delivery
 
 - <doc:OfflineRequests>

@@ -102,11 +102,7 @@ public actor HTTPClient {
                 throw .authenticationError(error)
             }
         }
-        do {
-            try await delegate.client(self, willSendRequest: &request)
-        } catch {
-            throw error as? JWWNetworkError ?? .untypedError(error: error)
-        }
+        request = try await prepare(request)
         if requiresAuthentication, request.value(forHTTPHeaderField: "Authorization") == nil {
             throw .authenticationError(URLError(.userAuthenticationRequired))
         }
@@ -123,15 +119,38 @@ public actor HTTPClient {
         } catch {
             throw .networkError(error)
         }
-        guard let response = response as? HTTPURLResponse else {
-            throw .invalidResponse(response)
+        let httpResponse = try Self.validate(response, allowingFailure: validateReplay)
+        return HTTPResult(data: data, statusCode: httpResponse.statusCode,
+                          retryAfter: RetryAfter.date(httpResponse.value(forHTTPHeaderField: "Retry-After"), now: now()))
+    }
+
+    /// Runs the existing preparation hook without changing ordinary or replay authentication semantics.
+    func prepare(_ request: URLRequest) async throws(JWWNetworkError) -> URLRequest {
+        var request = request
+        do {
+            try await delegate.client(self, willSendRequest: &request)
+        } catch {
+            throw error as? JWWNetworkError ?? .untypedError(error: error)
         }
-        guard validateReplay || HTTPURLResponse.successStatusCodes.contains(response.statusCode) else {
+        return request
+    }
+
+    /// Prepares a new transfer once; restored tasks never pass through this path.
+    func prepareTransfer(_ template: some NetworkRequestTemplate) async throws(JWWNetworkError) -> URLRequest {
+        let request = try await NetworkRequestBuilder(template: template).build(for: self)
+        let prepared = try await prepare(request)
+        do { try Task.checkCancellation() } catch { throw .networkError(error) }
+        return prepared
+    }
+
+    /// Shares status handling while retaining the queue's ability to inspect failed HTTP responses.
+    nonisolated static func validate(_ response: URLResponse?, allowingFailure: Bool = false) throws(JWWNetworkError) -> HTTPURLResponse {
+        guard let response = response as? HTTPURLResponse else { throw .invalidResponse(response) }
+        guard allowingFailure || HTTPURLResponse.successStatusCodes.contains(response.statusCode) else {
             throw .requestFailed(code: response.statusCode,
                                  message: HTTPURLResponse.localizedString(forStatusCode: response.statusCode))
         }
-        return HTTPResult(data: data, statusCode: response.statusCode,
-                          retryAfter: RetryAfter.date(response.value(forHTTPHeaderField: "Retry-After"), now: now()))
+        return response
     }
 }
 
