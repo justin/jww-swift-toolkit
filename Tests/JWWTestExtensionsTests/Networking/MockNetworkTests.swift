@@ -67,7 +67,11 @@ struct MockNetworkTests {
         #expect(throws: MockNetworkError.self) { try network.verify() }
     }
 
+    #if os(watchOS)
+    @Test(.disabled("watchOS may route body-bearing requests outside URLProtocol; covered on other platforms."), arguments: [false, true])
+    #else
     @Test(arguments: [false, true])
+    #endif
     func testRecordsBodyAndMatchesHeaderNamesCaseInsensitively(streamed: Bool) async throws {
         try await withMockNetwork { network in
             let body = Data("request body".utf8)
@@ -123,7 +127,11 @@ struct MockNetworkTests {
         }
     }
 
+    #if os(watchOS)
+    @Test(.disabled("watchOS retries injected URLProtocol errors through its network proxy; covered on other platforms."))
+    #else
     @Test
+    #endif
     func testTransportErrorPreservesDetails() async throws {
         try await withMockNetwork { network in
             let failure = NSError(domain: "FixtureTransport", code: 73, userInfo: [NSLocalizedDescriptionKey: "fixture failure"])

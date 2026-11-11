@@ -38,6 +38,9 @@ final class DeprecatedNetworkCompatibilityTests: MockedNetworkTestCase {
     }
 
     func testTransportErrorAndMissingStub() async throws {
+        #if os(watchOS)
+        try XCTSkipIf(true, "watchOS retries injected URLProtocol errors through its network proxy; covered on other platforms.")
+        #endif
         let url = URL(string: "https://legacy.invalid/failure")!
         MockURLProtocol.addStub(NetworkResponseStub(url: url, error: URLError(.timedOut)))
         do {

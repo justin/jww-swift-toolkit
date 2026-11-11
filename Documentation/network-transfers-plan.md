@@ -1,8 +1,11 @@
 # File transfers and incremental responses
 
-Status: JWWNetworking implemented locally; validation completed with existing watchOS test failures.
-Application integration, background lifecycle acceptance, and backend work remain pending.
-Updated: 2026-11-09.
+Status: JWWNetworking transport implementation is on main at `88d7e49`.
+The working tree contains validated watchOS test remediation: the local platform
+matrix passes with nine documented watchOS-only test-method skips. Application
+integration, background lifecycle acceptance, and backend work remain separate,
+pending tracks.
+Updated: 2026-11-11.
 
 ## Outcome and accepted decisions
 
@@ -28,7 +31,9 @@ enabling general HTTP caching or retaining another account's files after logout.
 
 The preceding source audit inspected toolkit main at `9867b4f`, togetherMade
 backend main at `a8a5e294`, and fetched mobile-ios main at `0815999`. The iOS
-working branch was left intact. Refresh these revisions before implementation.
+working branch was left intact. Toolkit main was fetched and verified at `88d7e49`
+on 2026-11-11. Refresh the companion revisions before their separate integrations;
+the application findings below describe the original audit, not a current app review.
 
 - `Sources/JWWNetworking/HTTPClient.swift`: `send` builds a request, executes
   `URLSession.data(for:)`, validates status, then decodes the complete response.
@@ -65,7 +70,7 @@ working branch was left intact. Refresh these revisions before implementation.
 
 ## Public API design
 
-The library contracts below are implemented in the working tree. Existing
+The library contracts below are implemented on main in `88d7e49`. Existing
 initializers, templates, send behavior, decoding, and errors remain compatible.
 Do not introduce dependencies, a universal transfer protocol, or a new database.
 
@@ -123,7 +128,7 @@ Keep it a thin adapter over Foundation tasks and delegate callbacks. Foundation
 owns transfer scheduling and execution; the adapter must not introduce a custom
 scheduler, retry engine, persistence layer, or extensible event framework.
 
-Proposed surface:
+Implemented surface:
 
 - Initialize with a caller-supplied background URLSessionConfiguration, HTTPClient
   for preparation, fixed callbacks, and upload-response byte limit.
@@ -209,9 +214,10 @@ separate future backend work.
 
 ## Implementation sequence and acceptance
 
-Checked items below describe local implementation and passing checks, not merged
-or deployed work. Each track is independently reviewable; library completion does
-not close app, backend, or physical-device acceptance.
+L1–L3 implementation is on main in `88d7e49`; their validation checkboxes describe
+the recorded local checks, not deployed proof. C1, T1, T2, and A1 remain separate
+application, backend, and runtime acceptance tracks. Library completion does not
+close those tracks.
 
 ### L1 — Toolkit preparation compatibility
 
@@ -246,8 +252,9 @@ not close app, backend, or physical-device acceptance.
   narrowly gate background APIs where needed rather than raising package minimums.
 - [x] Run swift build, swift test, SwiftLint, and DocC generation/symbol validation.
 - [x] Run the repository's all-platform test matrix using installed compatible
-  simulator destinations. macOS/iOS/tvOS/visionOS pass; watchOS has existing mock-network
-  failures reproduced on unchanged main. See evidence below; the matrix is not all green.
+  simulator destinations. The original run passed macOS/iOS/tvOS/visionOS and exposed
+  watchOS mock-network failures. See the dated evidence and remediation below;
+  platform-specific skips are not passing coverage for the skipped assertions.
 
 ### C1 — Clickwheel integration (separate application change)
 
@@ -343,12 +350,13 @@ redirect requirement. These do not justify changing existing behavior silently.
 Excluded: automatic upload retries, offline-queue replay of uploads, resumable
 upload protocols, explicit download resume data, progressive togetherMade video,
 transcoding/HLS, server upload deduplication, signed-upload APIs, and a generic media
-framework. App migration, infrastructure activation, commits, and publication are
-outside the current toolkit implementation request.
+framework. App migration and infrastructure activation remain outside the toolkit work.
+The transport implementation was published on main as `88d7e49`; this does not
+authorize app changes or hosted activation.
 
 ## Local implementation evidence — 2026-11-09
 
-Working-tree implementation (uncommitted): shared HTTPClient preparation/status
+Implementation subsequently published on main as `88d7e49`: shared HTTPClient preparation/status
 helpers; foreground file uploads; incremental streaming; HTTPTransferSession and
 its fixed callback bridge; byte progress and task snapshots; public DocC guidance;
 loopback HTTP and preparation regression tests. No app or backend files changed.
@@ -370,7 +378,7 @@ Passed:
   watchOS suite failed in existing HTTPClientTests and DeprecatedNetworkCompatibilityTests;
   a separate unchanged HEAD (`9867b4f`) archive reproduced mock-network failures.
   Mocked requests reached real networking (DNS/connect errors and unused mock outcomes).
-  These existing test failures remain unresolved; do not claim a passing watchOS suite.
+  These were unresolved at that checkpoint; see the 2026-11-11 remediation below.
 - SwiftPM SDK compilation of JWWNetworking for iOS 18.4, tvOS 18.4, and watchOS 11.4
   simulator targets. These are compilation checks, not runtime acceptance.
 
@@ -387,7 +395,8 @@ removed afterward; existing simulators were retained.
 Physical-device background restoration, locked-device file access, app-owned result
 persistence/acknowledgement, upgrade migration, and hosted integration remain in A1.
 The unit-level background-event notification test proves callback forwarding only.
-No commit, publication, application migration, or hosted mutation has occurred.
+Commit `88d7e49` publishes the toolkit implementation. Application migration and
+hosted mutation are not established by these checks and remain separate work.
 
 ### PR review follow-up — 2026-11-09
 
@@ -402,3 +411,59 @@ The transfer suites now contain 22 tests. Follow-up validation passed: full
 HTTPTransferTests Xcode suite. The earlier platform results apply to unchanged
 production code; other simulator suites were not repeated for this test-only
 follow-up. Background physical-device acceptance remains pending.
+
+### watchOS test remediation — 2026-11-11
+
+Main remains `88d7e49`. A fresh watchOS 27.0 / Apple Watch Series 11 (42mm)
+Simulator run reproduced the mock-network failures. Successful mocked responses
+can complete, but injected transport errors and some body-bearing requests fall
+through to watchOS's proxy/network path, producing DNS/connect errors and unused
+mock outcomes. This is distinct from background transfer lifecycle acceptance.
+
+The focused HTTPClientTests and DeprecatedNetworkCompatibilityTests invocation
+failed. The full run also identified failures in MockNetworkTests for transport
+error details and body capture. Justin selected narrowly documented watchOS skips
+rather than replacing the mock transport. Seven XCTest methods and two Swift Testing tests are skipped only on
+watchOS. This includes two broad error-classification tests that otherwise passed
+on real network errors instead of their injected fixtures. Other platforms retain
+the assertions, and watchOS retains successful response, preparation, queue, direct
+protocol lifecycle, and loopback transfer coverage. Skips are not passing coverage
+for the omitted assertions.
+
+The initial Xcode invocation stopped at SwiftLint plugin trust validation. The
+Xcode validation used `-skipPackagePluginValidation` per invocation; no persistent
+trust setting was changed. SwiftLint was also run separately. Full
+host `swift test` passed on 2026-11-11. Plan edits pass `git diff --check`.
+Application/backend repositories and device acceptance remain unchanged.
+
+The full baseline also exposed a timeout in the loopback truncated-response test.
+Its fixture now declares `Connection: close` and completes the TCP send explicitly,
+so the client observes EOF with an incomplete body rather than waiting for more
+bytes. The callback-error case now uses a complete response so its expected callback
+error cannot race an unrelated truncation error. The focused watchOS transfer suite
+passed after the EOF correction; the full matrix validates both cases below.
+No production transport behavior or public API changed.
+
+
+Final validation of the test remediation on 2026-11-11:
+
+- Full `swift test`: passed on macOS.
+- Full package Xcode tests: passed on macOS, iPhone 17 / iOS 27.2, Apple TV 4K
+  (3rd generation) / tvOS 27.0, Apple Watch Series 11 (42mm) / watchOS 27.0,
+  and Apple Vision Pro / visionOS 27.0. Only watchOS has the nine documented
+  skipped test methods; the other platforms execute those assertions.
+- Each platform used `xcodebuild test -scheme 'JWW Swift Toolkit-Package'
+  -skipPackagePluginValidation -destination <destination>`. The repository matrix
+  was run one destination at a time with available compatible simulators because
+  the VS Code task's named devices are not installed. This is local validation,
+  not hosted CI or physical-device background lifecycle evidence.
+- `swiftlint lint --config .swiftlint.yml`: passed with the same ten pre-existing
+  warnings and no new warnings. `git diff --check`: passed.
+- Logs: `/tmp/jww-watch-final-{macos,ios,tvos,watchos,visionos}.log`,
+  `/tmp/jww-watch-final-host.log`, and `/tmp/jww-watch-final-lint.log`.
+  Temporary watchOS, tvOS, and visionOS simulators created for this run were
+  removed; existing simulator devices were retained.
+
+The test fixes and this plan update are local working-tree changes, not part of
+`88d7e49` until separately committed and published. C1, T1, T2, and A1 are not
+closed by these results. No application integration changes were made.

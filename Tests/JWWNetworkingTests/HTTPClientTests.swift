@@ -17,6 +17,9 @@ final class HTTPClientTests: NetworkTestCase {
 
     /// Validate we can send a single request and have it throw an error.
     func testFailedRequest() async throws {
+        #if os(watchOS)
+        try XCTSkipIf(true, "watchOS may retry URLProtocol failures or body-bearing requests through its network proxy; covered on other platforms.")
+        #endif
         let template = NetworkRequestFake(baseURL: TestingConstants.baseURL, path: "/test", method: .get)
         let error = URLError(.badURL)
         try network.expect(.init(.get, url: URL(string: "https://localhost/test")!), outcome: .failure(error))
@@ -67,6 +70,9 @@ final class HTTPClientTests: NetworkTestCase {
     }
     /// Transport classification must reflect the URLSession error, not an untyped wrapper.
     func testConnectivityErrorClassification() async throws {
+        #if os(watchOS)
+        try XCTSkipIf(true, "watchOS may retry URLProtocol failures or body-bearing requests through its network proxy; covered on other platforms.")
+        #endif
         let template = NetworkRequestFake(baseURL: TestingConstants.baseURL, path: "/offline", method: .get)
         try network.expect(.init(.get, url: URL(string: "https://localhost/offline")!), outcome: .failure(URLError(.notConnectedToInternet)))
         do {
@@ -80,6 +86,9 @@ final class HTTPClientTests: NetworkTestCase {
 
     /// Disabling retries uses the ordinary transport and leaves the durable store empty.
     func testNoneDoesNotPersist() async throws {
+        #if os(watchOS)
+        try XCTSkipIf(true, "watchOS may retry URLProtocol failures or body-bearing requests through its network proxy; covered on other platforms.")
+        #endif
         let fixture = try OfflineQueueFixture()
         defer { try? fixture.remove() }
         let template = NetworkRequestFake(baseURL: TestingConstants.baseURL, path: "/once", method: .get)
@@ -96,6 +105,9 @@ final class HTTPClientTests: NetworkTestCase {
     }
     /// Replay traverses the real URLSession transport with a fresh bearer token and stable operation key.
     func testReplayRefreshesAuthentication() async throws {
+        #if os(watchOS)
+        try XCTSkipIf(true, "watchOS may retry URLProtocol failures or body-bearing requests through its network proxy; covered on other platforms.")
+        #endif
         let fixture = try OfflineQueueFixture()
         defer { try? fixture.remove() }
         let authentication = OfflineTestAuthentication()
@@ -180,6 +192,9 @@ final class HTTPClientTests: NetworkTestCase {
 
     /// Explicit credentials take precedence whether or not an authentication provider exists.
     func testRetryEnabledRequestPreservesExplicitAuthorization() async throws {
+        #if os(watchOS)
+        try XCTSkipIf(true, "watchOS may retry URLProtocol failures or body-bearing requests through its network proxy; covered on other platforms.")
+        #endif
         for hasProvider in [true, false] {
             let fixture = try OfflineQueueFixture()
             defer { try? fixture.remove() }
@@ -212,6 +227,9 @@ final class HTTPClientTests: NetworkTestCase {
 
     /// Delegate credentials are generated again on replay and never enter the persisted snapshot.
     func testDelegateAuthenticationWithoutProvider() async throws {
+        #if os(watchOS)
+        try XCTSkipIf(true, "watchOS may retry URLProtocol failures or body-bearing requests through its network proxy; covered on other platforms.")
+        #endif
         let fixture = try OfflineQueueFixture()
         defer { try? fixture.remove() }
         let delegate = OfflineRecordingDelegate(authorization: "Bearer first")

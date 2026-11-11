@@ -423,13 +423,17 @@ struct HTTPTransferTests {
 
     @Test
     func streamReportsCallbackAndTruncatedBodyFailures() async throws {
-        let server = try TransferHTTPServer { _, connection in
-            connection.send(content: Data("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: 100\r\n\r\nshort".utf8),
-                            completion: .contentProcessed { _ in connection.cancel() })
-        }
-        defer { server.stop() }
-        let url = try await server.start()
         for failCallback in [true, false] {
+            let server = try TransferHTTPServer { _, connection in
+                // A callback failure needs a complete body so it cannot race a transport failure.
+                let length = failCallback ? 5 : 100
+                let response = "HTTP/1.1 200 OK\r\nContent-Length: \(length)\r\nConnection: close\r\n\r\nshort"
+                // Explicit EOF makes the incomplete body a failure rather than a stalled keep-alive response.
+                connection.send(content: Data(response.utf8), isComplete: true,
+                                completion: .contentProcessed { _ in connection.cancel() })
+            }
+            defer { server.stop() }
+            let url = try await server.start()
             do {
                 try await HTTPClient(configuration: .init(baseURL: nil)).stream(template: StaticRequestFake(url: url),
                                                                                receiveResponse: { _ in }, receiveData: { _ in
